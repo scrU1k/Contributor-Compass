@@ -34,6 +34,7 @@ export function kindLabel(candidate: RankedCandidate): string {
 
 export function friendliness(candidate: RankedCandidate): "friendly" | "established" | "quiet" {
   const s = candidate.signals;
+  if (!s.outsiderMergeStatusKnown) return "established";
   if (s.hasContributing && s.mergedPRsFromOutsiders90d >= 3) return "friendly";
   if (s.mergedPRsFromOutsiders90d === 0 && !s.hasContributing) return "quiet";
   return "established";
@@ -42,21 +43,29 @@ export function friendliness(candidate: RankedCandidate): "friendly" | "establis
 export function plainSummary(candidate: RankedCandidate): string {
   const f = friendliness(candidate);
   const adjective =
-    f === "friendly" ? "a friendly" : f === "established" ? "an established" : "a low-traffic";
+    f === "friendly" ? "an active" : f === "established" ? "an established" : "a low-traffic";
   const language = candidate.signals.language ?? "open-source";
   const setup = candidate.signals.hasReadmeSetup
-    ? "The project explains how to set it up."
-    : "Setup isn't documented yet — the guide walks you through it.";
+    ? "A README and install manifest are present; their setup instructions haven't been checked."
+    : "A README with an install manifest wasn't found; check the project setup before starting.";
   const merged =
-    candidate.signals.mergedPRsFromOutsiders90d > 0
-      ? ` It has recently merged ${candidate.signals.mergedPRsFromOutsiders90d} pull request${
+    !candidate.signals.outsiderMergeStatusKnown
+      ? " Merge history couldn't be checked."
+      : candidate.signals.mergedPRsFromOutsiders90d > 0
+      ? ` It has recently merged ${candidate.signals.outsiderMergeSampled ? "at least " : ""}${candidate.signals.mergedPRsFromOutsiders90d} pull request${
           candidate.signals.mergedPRsFromOutsiders90d === 1 ? "" : "s"
         } from people outside the team.`
       : "";
 
+  const competition = candidate.linkedOpenPRs === null
+    ? " The competing pull request check is currently unknown."
+    : candidate.linkedOpenPRs > 0
+      ? ` ${candidate.linkedOpenPRs} linked open pull request(s) were found.`
+      : " No linked open pull request was found in the checked sample.";
+
   return `A ${kindLabel(candidate)} in ${adjective} ${language} project — about ${effortLabel(
     candidate,
-  )} of work. ${setup}${merged}`;
+  )} of work. ${setup}${merged}${competition}`;
 }
 
 export type Verdict = { label: string; tone: "good" | "warn" | "bad" };
@@ -100,16 +109,22 @@ export function plainEvidence(candidate: RankedCandidate): string[] {
     } else if (jev.verdict === "VERIFIED_READY") {
       out.push(`✅ Gemma-Jev: ${jev.evidence}`);
     }
+    if (jev.quote && jev.quoteVerified) {
+      out.push(`🔍 Grounded quote: "${jev.quote}"`);
+    }
   }
 
   if (s.hasReadmeSetup) out.push("Setup is documented");
   if (s.hasContributing) out.push("Has a contribution guide");
   if (s.hasTests) out.push("Has tests");
   if (s.mergedPRsFromOutsiders90d > 0) {
-    out.push(`${s.mergedPRsFromOutsiders90d} outside PR${s.mergedPRsFromOutsiders90d === 1 ? "" : "s"} merged recently`);
+    out.push(`${s.outsiderMergeSampled ? "At least " : ""}${s.mergedPRsFromOutsiders90d} outside PR${s.mergedPRsFromOutsiders90d === 1 ? "" : "s"} merged recently`);
+  } else if (!s.outsiderMergeStatusKnown) {
+    out.push("Outside merge history could not be checked");
   }
   if (!candidate.assigned) out.push("Nobody is assigned yet");
-  if (candidate.linkedOpenPRs === 0) out.push("No one else is working on it");
+  if (candidate.linkedOpenPRs === 0) out.push("No linked open PR found");
+  else if (candidate.linkedOpenPRs === null) out.push("Competing PR status could not be checked");
   if (s.license) out.push(`${s.license} licensed`);
 
   const effort = effortFromLabels(candidate.labels);

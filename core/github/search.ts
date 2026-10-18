@@ -1,5 +1,5 @@
 import { gh } from "./client";
-import { cached, readCache } from "@/core/cache/cache";
+import { cached } from "@/core/cache/cache";
 
 /** Raw shapes we consume from the GitHub search API. Intentionally partial. */
 
@@ -45,14 +45,16 @@ export function repoNamespaceFromUrl(repositoryUrl: string): string {
 
 /** Search issues. Pull requests are filtered out — search/issues returns both. */
 export async function searchIssues(query: string, perPage = 25): Promise<GhIssue[]> {
-  const params = new URLSearchParams({
-    q: query,
-    sort: "updated",
-    order: "desc",
-    per_page: String(perPage),
+  return cached(`search-issues:v1:${query}:${perPage}`, 5 * 60 * 1000, async () => {
+    const params = new URLSearchParams({
+      q: query,
+      sort: "updated",
+      order: "desc",
+      per_page: String(Math.min(Math.max(perPage, 1), 100)),
+    });
+    const data = await gh<SearchResult<GhIssue>>(`/search/issues?${params.toString()}`);
+    return data.items.filter((item) => !item.pull_request);
   });
-  const data = await gh<SearchResult<GhIssue>>(`/search/issues?${params.toString()}`);
-  return data.items.filter((item) => !item.pull_request);
 }
 
 /** Open PRs that mention an issue — used as the competition signal. */
@@ -71,30 +73,22 @@ export async function countLinkedOpenPRs(repo: string, issueNumber: number): Pro
 }
 
 export function parseIssueUrl(input: string): { repo: string; number: number } | null {
-  const match = input
-    .trim()
-    .match(/github\.com\/([^/\s]+)\/([^/\s]+)\/(?:issues|pull)\/(\d+)/i);
-  if (!match) return null;
-  return { repo: `${match[1]}/${match[2]}`, number: Number(match[3]) };
+  try {
+    const url = new URL(input.trim());
+    if (url.hostname.toLowerCase() !== "github.com") return null;
+    const match = url.pathname.match(/^\/([A-Za-z0-9_-][A-Za-z0-9_.-]*)\/([A-Za-z0-9_-][A-Za-z0-9_.-]*)\/(?:issues|pull)\/(\d+)\/?$/i);
+    if (!match) return null;
+    return { repo: `${match[1]}/${match[2]}`, number: Number(match[3]) };
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Single issue, cached for 10 minutes.
- *
- * First tries the repo-issues cache (populated by match), then falls back to
- * the per-issue cache, then to the live API. This makes guide/resolving
- * resilient to rate limits once the match path has run.
- */
+/** Recheck a selected issue directly; online results are cached for 30 seconds. */
 export async function getIssue(repo: string, issueNumber: number): Promise<GhIssue> {
-  // Try the repo issues cache first (populated by getRepoIssues during match)
-  const repoIssues = await readCache<GhIssue[]>(`issues:v3:${repo}`);
-  if (repoIssues) {
-    const hit = repoIssues.find((i) => i.number === issueNumber);
-    if (hit) return hit;
-  }
-
-  // Fallback to per-issue cache, then live API
-  return cached(`issue:v1:${repo}#${issueNumber}`, 10 * 60 * 1000, async () => {
+  // Recheck the selected issue independently of the broader repository-list
+  // cache so recently closed or assigned issues are caught promptly.
+  return cached(`issue:v2:${repo}#${issueNumber}`, 30_000, async () => {
     const issue = await gh<GhIssue>(`/repos/${repo}/issues/${issueNumber}`);
     if (issue.pull_request) {
       throw new Error("That link points to a pull request, not an issue.");

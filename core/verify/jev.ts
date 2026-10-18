@@ -15,7 +15,7 @@ import type { IssueCandidate, JevDecision, RepoSignals } from "@/core/types";
  *   4. Deterministic post-processing for choice, score, and noul
  */
 
-export type JevQuestionType = "noul" | "choice" | "score";
+export type JevQuestionType = "noul" | "choice" | "score" | "quote";
 
 export interface JevQuestionSpec {
   type: JevQuestionType;
@@ -42,7 +42,38 @@ export interface JevScoreAnswer {
   confidence: number;
 }
 
-export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer;
+export interface JevQuoteAnswer {
+  type: "quote";
+  rawQuote: string | null;
+}
+
+export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer | JevQuoteAnswer;
+
+/**
+ * Validates whether a proposed quote is a strict verbatim substring of the issue body.
+ * If the model hallucinated or paraphrased even one word, drops the quote.
+ */
+export function verifyGroundedQuote(
+  issueBody: string,
+  proposedQuote?: string | null,
+): { quote: string | null; quoteVerified: boolean } {
+  if (!proposedQuote || proposedQuote.trim().toLowerCase() === "none") {
+    return { quote: null, quoteVerified: false };
+  }
+  const cleaned = proposedQuote.trim().replace(/^["'`]|["'`]$/g, "");
+  if (cleaned.length < 6) {
+    return { quote: null, quoteVerified: false };
+  }
+  if (issueBody.includes(cleaned)) {
+    return { quote: cleaned, quoteVerified: true };
+  }
+  const normBody = issueBody.replace(/\s+/g, " ");
+  const normQuote = cleaned.replace(/\s+/g, " ");
+  if (normBody.includes(normQuote)) {
+    return { quote: cleaned, quoteVerified: true };
+  }
+  return { quote: null, quoteVerified: false };
+}
 
 export interface JevEvaluationResult {
   model: string;
@@ -69,15 +100,27 @@ export class GemmaJevHarness {
     const key = env.llmApiKey();
     const model = env.llmModel() || "gemma-4-26b-a4b-it";
 
+    if (!/^gemma-4(?:-|$)/i.test(model)) {
+      throw new Error("This build supports Gemma 4 models only");
+    }
+
     if (!base || !key) {
       throw new Error("Gemma LLM credentials not configured");
     }
 
     // 1. Build single-token alias maps for each question
     const aliasMaps: Record<string, Record<string, string>> = {};
-    const promptQuestions: Record<string, { instructions: string; options: Record<string, string> }> = {};
+    const promptQuestions: Record<string, { instructions: string; options?: Record<string, string>; format?: string }> = {};
 
     for (const [qId, qSpec] of Object.entries(questions)) {
+      if (qSpec.type === "quote") {
+        promptQuestions[qId] = {
+          instructions: qSpec.instructions,
+          format: "exact verbatim quote from body or 'none'",
+        };
+        continue;
+      }
+
       const criteria = qSpec.type === "noul" ? ["yes", "no"] : qSpec.criteria ?? [];
       const letters = Array.from(ASCII_UPPERCASE.slice(0, criteria.length));
 
@@ -96,7 +139,8 @@ export class GemmaJevHarness {
     const systemInstruction =
       "You are a deterministic System-1 decision classifier. " +
       "Evaluate the STATE against each question in QUESTIONS and output ONLY " +
-      "a valid JSON object mapping each question key to its single-letter option code (e.g. {\"q1\": \"A\"}). " +
+      "a valid JSON object mapping each question key to its single-letter option code (e.g. {\"q1\": \"A\"}), " +
+      "except for quote questions where you output an exact verbatim substring from the issue body or \"none\". " +
       "No explanations, no markdown fences, no thinking.";
 
     const userPrompt = `STATE:\n${JSON.stringify(state, null, 2)}\n\nQUESTIONS:\n${JSON.stringify(promptQuestions, null, 2)}`;
@@ -150,7 +194,16 @@ export class GemmaJevHarness {
     const answers: Record<string, JevAnswer> = {};
 
     for (const [qId, qSpec] of Object.entries(questions)) {
-      const validLetters = Object.keys(aliasMaps[qId]);
+      if (qSpec.type === "quote") {
+        const rawQuote = typeof rawChoices[qId] === "string" ? rawChoices[qId] : null;
+        answers[qId] = {
+          type: "quote",
+          rawQuote,
+        };
+        continue;
+      }
+
+      const validLetters = Object.keys(aliasMaps[qId] || {});
       const chosenLetter = (rawChoices[qId] || validLetters[0] || "A").toUpperCase();
 
       // Extract temperature-scaled probabilities
@@ -228,11 +281,13 @@ export class GemmaJevHarness {
     chosenLetter: string,
     validLetters: string[],
   ): Record<string, number> {
-    // If endpoint did not return logprobs, fallback to deterministic argmax
+    // A parsed choice is not a confidence measurement. If token scores are
+    // missing, return a uniform distribution so downstream confidence stays low.
     if (!logprobsContent || !Array.isArray(logprobsContent) || logprobsContent.length === 0) {
       const fallback: Record<string, number> = {};
+      const probability = 1 / Math.max(1, validLetters.length);
       for (const ltr of validLetters) {
-        fallback[ltr] = ltr === chosenLetter ? 1.0 : 0.0;
+        fallback[ltr] = probability;
       }
       return fallback;
     }
@@ -286,14 +341,18 @@ export async function evaluateIssueWithJev(
 ): Promise<JevDecision> {
   if (!llmConfigured()) {
     // Deterministic offline fallback
-    const hasLabel = candidate.labels.some((l) => /good first issue|beginner|starter/i.test(l));
+    const hasLabel = candidate.labels.some((l) => /good first issue|beginner|starter|easy|newcomer/i.test(l));
     return {
-      verdict: candidate.assigned ? "CONTESTED" : hasLabel ? "VERIFIED_READY" : "NEEDS_TRIAGE",
-      confidence: 0.85,
-      labelAccuracyScore: hasLabel ? 0.9 : 0.5,
-      calibratedScope: candidate.body.length > 1500 ? "multi_file" : "micro_fix",
+      verdict: candidate.assigned ? "CONTESTED" : "NEEDS_TRIAGE",
+      confidence: 0.5,
+      labelAccuracyScore: 0.5,
+      calibratedScope: "isolated_module",
       hiddenPrerequisites: [],
-      evidence: "Deterministic structural assessment (no LLM configured).",
+      evidence: hasLabel
+        ? "A beginner-oriented label is present; semantic difficulty was not assessed because Gemma is unavailable."
+        : "No beginner-oriented label was found; semantic difficulty was not assessed because Gemma is unavailable.",
+      quote: null,
+      quoteVerified: false,
     };
   }
 
@@ -309,6 +368,7 @@ export async function evaluateIssueWithJev(
       has_ci: signals.hasCI,
       has_tests: signals.hasTests,
       outsider_merges_90d: signals.mergedPRsFromOutsiders90d,
+      outsider_merge_status_known: signals.outsiderMergeStatusKnown,
       is_assigned: candidate.assigned,
       linked_open_prs: candidate.linkedOpenPRs,
     };
@@ -339,37 +399,53 @@ export async function evaluateIssueWithJev(
           "deep_scheduler_or_concurrency_internals",
         ],
       },
+      evidence_quote: {
+        type: "quote",
+        instructions: "Copy a short verbatim quote (at most 15 words) from the issue body that directly proves the hidden requirement or trap, or 'none' if there is no trap.",
+      },
     });
 
     const beginnerAnswer = result.answers["beginner_friendly"] as JevNoulAnswer;
     const honestyAnswer = result.answers["label_honesty"] as JevScoreAnswer;
     const trapAnswer = result.answers["scope_trap"] as JevChoiceAnswer;
+    const quoteAnswer = result.answers["evidence_quote"] as JevQuoteAnswer | undefined;
+    const quoteCheck = verifyGroundedQuote(candidate.body, quoteAnswer?.rawQuote);
 
     // Ordinal score is 0 to 3 -> normalize to 0..1
     const normalizedHonesty = Math.min(1.0, Math.max(0.0, (honestyAnswer.score ?? 2) / 3));
     const trapChoice = trapAnswer.choice;
     const hasTrap = trapChoice !== "none_clear_and_isolated" && trapAnswer.confidence > 0.35;
+    const hasBeginnerLabel = candidate.labels.some((l) =>
+      /good first issue|beginner|starter|easy|newcomer/i.test(l),
+    );
 
     let verdict: JevDecision["verdict"] = "VERIFIED_READY";
     const hiddenPrerequisites: string[] = [];
     let evidence = "Well-scoped, isolated contribution accessible to newcomers.";
 
-    if (candidate.assigned || candidate.linkedOpenPRs > 0) {
+    if (candidate.assigned || (candidate.linkedOpenPRs !== null && candidate.linkedOpenPRs > 0)) {
       verdict = "CONTESTED";
       evidence = candidate.assigned
         ? "Issue is already assigned to another contributor."
         : `Already has ${candidate.linkedOpenPRs} competing open pull request(s).`;
+    } else if (candidate.linkedOpenPRs === null) {
+      verdict = "NEEDS_TRIAGE";
+      evidence = "The competing pull request check was unavailable; current availability is not fully verified.";
     } else if (hasTrap || normalizedHonesty < 0.35) {
-      verdict = "MISLABELED_TRAP";
+      verdict = hasBeginnerLabel ? "MISLABELED_TRAP" : "NEEDS_TRIAGE";
       if (trapChoice === "requires_redis_or_external_infra") {
         hiddenPrerequisites.push("external_infra", "redis");
-        evidence = "Requires external infrastructure/Redis not mentioned in the beginner label.";
+        evidence = hasBeginnerLabel
+          ? "Requires external infrastructure/Redis not mentioned in the beginner label."
+          : "Requires external infrastructure/Redis setup.";
       } else if (trapChoice === "vague_missing_reproduction") {
         hiddenPrerequisites.push("needs_repro");
         evidence = "Lacks reproduction steps; high risk of newcomer stall.";
       } else if (trapChoice === "deep_scheduler_or_concurrency_internals") {
         hiddenPrerequisites.push("concurrency_internals");
-        evidence = "Involves concurrency/scheduler internals; misleading beginner label.";
+        evidence = hasBeginnerLabel
+          ? "Involves concurrency/scheduler internals; misleading beginner label."
+          : "Involves complex concurrency and scheduler internals.";
       } else {
         evidence = "Requires maintainer architectural decision before code can be accepted.";
       }
@@ -394,6 +470,8 @@ export async function evaluateIssueWithJev(
       calibratedScope,
       hiddenPrerequisites,
       evidence,
+      quote: quoteCheck.quote,
+      quoteVerified: quoteCheck.quoteVerified,
     };
   } catch (err) {
     // Graceful fallback on network or API failure
@@ -403,7 +481,9 @@ export async function evaluateIssueWithJev(
       labelAccuracyScore: 0.5,
       calibratedScope: "isolated_module",
       hiddenPrerequisites: [],
-      evidence: `Evaluation fallback: ${err instanceof Error ? err.message : "API unavailable"}`,
+      evidence: "Gemma semantic assessment was unavailable; use the structural evidence and ask the maintainer if scope is unclear.",
+      quote: null,
+      quoteVerified: false,
     };
   }
 }

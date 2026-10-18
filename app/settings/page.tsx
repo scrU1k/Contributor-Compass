@@ -17,7 +17,6 @@ interface Health {
   githubProbe: "ok" | "unauthorized" | "rate-limited" | "error" | "skipped";
   llm: boolean;
   model: string | null;
-  baseUrl: string | null;
 }
 
 function describeGithub(health: Health): string {
@@ -120,36 +119,7 @@ export default function SettingsPage() {
             />
           </div>
 
-          <div className="field-grid">
-            <div className="field">
-              <label className="field-label" htmlFor="llm-model">
-                Model
-              </label>
-              <p className="field-hint">Any OpenAI-compatible model id.</p>
-              <input
-                id="llm-model"
-                className="input"
-                value={settings.llmModel}
-                onChange={(event) => update("llmModel", event.target.value)}
-                placeholder="gemma-4-31b-it"
-                spellCheck={false}
-              />
-            </div>
-
-            <div className="field">
-              <label className="field-label" htmlFor="llm-base">
-                Base URL
-              </label>
-              <p className="field-hint">Swap providers without a rebuild.</p>
-              <input
-                id="llm-base"
-                className="input"
-                value={settings.llmBaseUrl}
-                onChange={(event) => update("llmBaseUrl", event.target.value)}
-                spellCheck={false}
-              />
-            </div>
-          </div>
+          <p className="field-hint">This build sends model requests to the Google AI Studio endpoint configured by the server and uses Gemma 4.</p>
 
           <div className="field">
             <label className="field-label" htmlFor="gh-token">

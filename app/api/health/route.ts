@@ -44,7 +44,6 @@ export async function GET(request: Request) {
       githubProbe,
       llm: llmConfigured(),
       model: env.llmModel() ?? null,
-      baseUrl: env.llmBaseUrl() ?? null,
       offline: isOffline(),
       cache: {
         files: cache.files,

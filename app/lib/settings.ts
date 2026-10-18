@@ -12,15 +12,11 @@
 
 export interface Settings {
   llmApiKey: string;
-  llmModel: string;
-  llmBaseUrl: string;
   githubToken: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   llmApiKey: "",
-  llmModel: "gemma-4-31b-it",
-  llmBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
   githubToken: "",
 };
 
@@ -52,8 +48,6 @@ export function clearSettings(): void {
 export function headersFor(settings: Settings): Record<string, string> {
   const headers: Record<string, string> = {};
   if (settings.llmApiKey.trim()) headers["x-compass-llm-key"] = settings.llmApiKey.trim();
-  if (settings.llmModel.trim()) headers["x-compass-llm-model"] = settings.llmModel.trim();
-  if (settings.llmBaseUrl.trim()) headers["x-compass-llm-base"] = settings.llmBaseUrl.trim();
   if (settings.githubToken.trim()) {
     headers["x-compass-github-token"] = settings.githubToken.trim();
   }

@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "prefetch": "tsx scripts/prefetch.ts"
+    "prefetch": "tsx scripts/prefetch.ts",
+    "evaluate": "tsx scripts/evaluate_jev.ts"
   },
   "dependencies": {
     "next": "^16.4.2",

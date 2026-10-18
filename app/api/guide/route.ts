@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { profileSchema } from "@/core/profile/schema";
 import { getIssue } from "@/core/github/search";
 import { getRepoSignals } from "@/core/github/signals";
-import { countPRsReferencing, getRepoOpenPRs } from "@/core/github/issues";
+import { getRepoOpenPRs, linkedPRCount } from "@/core/github/issues";
 import { toCandidate } from "@/core/candidate";
 import { scoreCandidate } from "@/core/score/readiness";
 import { buildGuidance } from "@/core/guide/guide";
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
     const repo = typeof body.repo === "string" ? body.repo : "";
     const number = Number(body.number);
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !Number.isInteger(number) || number <= 0) {
+    if (!/^[A-Za-z0-9_-][\w.-]*\/[A-Za-z0-9_-][\w.-]*$/.test(repo) || !Number.isInteger(number) || number <= 0) {
       return NextResponse.json({ error: "Expected { repo, number, profile }" }, { status: 400 });
     }
 
@@ -38,13 +38,16 @@ export async function POST(request: Request) {
     const profile = parsedProfile.data;
 
     try {
-      const [issue, signals, pulls] = await Promise.all([
+      const [issue, signals, pullsResult] = await Promise.all([
         getIssue(repo, number),
         getRepoSignals(repo),
-        getRepoOpenPRs(repo).catch(() => []),
+        getRepoOpenPRs(repo).catch(() => null),
       ]);
+      if (issue.state !== "open") {
+        return NextResponse.json({ error: "That issue is closed, so a new contribution cannot start there." }, { status: 409 });
+      }
 
-      const candidate = toCandidate(issue, repo, signals, countPRsReferencing(pulls, number));
+      const candidate = toCandidate(issue, repo, signals, pullsResult ? linkedPRCount(pullsResult, number) : null);
 
       const ranked: RankedCandidate = {
         ...candidate,

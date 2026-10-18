@@ -64,6 +64,7 @@ export interface RepoSignals {
   createdAt: string;
   pushedAt: string;
   openIssues: number;
+  sizeKb: number;
   license: string | null;
   hasReadmeSetup: boolean;
   hasContributing: boolean;
@@ -75,6 +76,8 @@ export interface RepoSignals {
   /** 0 = trivial to set up, 1 = heavy. */
   dependencyWeight: number;
   mergedPRsFromOutsiders90d: number;
+  outsiderMergeSampled: boolean;
+  outsiderMergeStatusKnown: boolean;
   medianMaintainerResponseHours: number | null;
   evidence: Evidence[];
 }
@@ -87,13 +90,15 @@ export interface IssueCandidate {
   title: string;
   url: string;
   body: string;
+  state: "open" | "closed";
   labels: string[];
   createdAt: string;
   updatedAt: string;
   assigned: boolean;
   comments: number;
   /** Open PRs that reference this issue — the competition signal. */
-  linkedOpenPRs: number;
+  /** null means the PR check failed or was incomplete; never treat as zero. */
+  linkedOpenPRs: number | null;
   sizeHint: IssueSize;
   signals: RepoSignals;
   /** Semantic + tag fit, computed before scoring. */
@@ -114,11 +119,13 @@ export type ScoreWeights = Record<ScoreKey, number>;
 
 export interface JevDecision {
   verdict: "VERIFIED_READY" | "MISLABELED_TRAP" | "NEEDS_TRIAGE" | "CONTESTED";
-  confidence: number;            // 0.0 to 1.0 calibrated confidence
+  confidence: number;            // heuristic model confidence; not statistically calibrated
   labelAccuracyScore: number;    // 0.0 to 1.0 (is 'good first issue' honest?)
   calibratedScope: "micro_fix" | "isolated_module" | "multi_file" | "architectural_overhaul";
   hiddenPrerequisites: string[]; // e.g. ['redis', 'docker', 'db_migration']
   evidence: string;              // Grounded 1-sentence explanation
+  quote?: string | null;         // Verbatim substring extracted from issue body (if verified)
+  quoteVerified?: boolean;       // True if quote exists verbatim in candidate.body
 }
 
 export interface ReadinessScore {

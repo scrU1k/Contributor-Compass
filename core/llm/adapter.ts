@@ -1,12 +1,11 @@
 import type { z } from "zod";
-import { env } from "@/core/config/env";
+import { env, isOffline } from "@/core/config/env";
 
 /**
- * Provider-agnostic LLM access.
+ * Gemma 4 access through the server-configured OpenAI-compatible endpoint.
  *
- * Everything speaks the OpenAI chat-completions protocol, so switching between
- * Google AI Studio, OpenRouter and Ollama is an env change, not a code change.
- * That is the adaptability claim, made real.
+ * The browser supplies a key only. The endpoint and allowed model family are
+ * controlled by the server, so a client cannot redirect secret-bearing requests.
  */
 
 export interface ChatMessage {
@@ -29,7 +28,10 @@ export class LlmError extends Error {
 }
 
 export function llmConfigured(): boolean {
-  return Boolean(env.llmBaseUrl() && env.llmApiKey() && env.llmModel());
+  const model = env.llmModel();
+  return !isOffline() && Boolean(
+    env.llmBaseUrl() && env.llmApiKey() && model && /^gemma-4(?:-|$)/i.test(model),
+  );
 }
 
 export async function chatText(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
@@ -37,6 +39,9 @@ export async function chatText(messages: ChatMessage[], opts: ChatOptions = {}):
   const key = env.llmApiKey();
   const model = opts.model ?? env.llmModel();
   if (!base || !key || !model) throw new LlmError("LLM is not configured");
+  if (!/^gemma-4(?:-|$)/i.test(model)) {
+    throw new LlmError("This build supports Gemma 4 models only");
+  }
 
   const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",

@@ -10,7 +10,7 @@ import { SkeletonList } from "../components/Skeleton";
 import { settingsHeaders } from "../lib/settings";
 
 interface ScoutInfo {
-  source: "gemma" | "registry";
+  source: "gemma" | "registry" | "hybrid";
   repos: { fullName: string; why: string }[];
 }
 
@@ -89,7 +89,7 @@ export default function ResultsPage() {
 
         {scout && scout.repos.length > 0 && (
           <p className="subtle" style={{ marginBottom: 16 }}>
-            {scout.source === "gemma" ? "Gemma scouted" : "Registry fallback scouted"}:{" "}
+            {scout.source === "gemma" ? "Gemma selected from registry" : scout.source === "hybrid" ? "Curated registry + live GitHub discovery" : "Registry fallback + live GitHub discovery"}:{" "}
             {scout.repos.map((repo) => repo.fullName).join(" · ")}
           </p>
         )}
@@ -183,8 +183,8 @@ export default function ResultsPage() {
         )}
 
         <footer className="footer">
-          Every candidate was checked for: still open · unassigned · no competing PR · real setup
-          docs · recent outsider merges.
+          Candidate state, assignment and repository signals are checked. Linked pull request
+          status is best-effort and shown as unknown if the check fails.
         </footer>
       </main>
     </>

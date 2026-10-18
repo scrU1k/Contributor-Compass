@@ -8,7 +8,7 @@ export function toCandidate(
   issue: GhIssue,
   repo: string,
   signals: RepoSignals,
-  linkedOpenPRs: number,
+  linkedOpenPRs: number | null,
 ): IssueCandidate {
   const labels = labelNames(issue);
   const assigned = Boolean(issue.assignee) || (issue.assignees?.length ?? 0) > 0;
@@ -19,6 +19,7 @@ export function toCandidate(
     title: issue.title,
     url: issue.html_url,
     body: issue.body ?? "",
+    state: issue.state === "closed" ? "closed" : "open",
     labels,
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,

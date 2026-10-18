@@ -17,10 +17,11 @@ Built for Hacktoberfest Hack Day (BMSCE IEEE Computer Society).
 
 1. You say who you are — or just "I'm a complete beginner" / "I want merges".
 2. It retrieves candidate issues from GitHub.
-3. It **verifies** each one: still open? unassigned? already contested by an open PR?
-   does the repo have setup docs, CI, and a history of merging outsider contributions?
+3. It checks issue state and assignment, checks for linked open PRs where available,
+   and collects repository setup, CI, and contribution-history signals.
 4. It scores each issue with a **Contribution Readiness Score** and explains the evidence.
-5. It generates a grounded **getting-started guide** for the issue you pick.
+5. It generates a getting-started guide using the issue and repository file tree. File paths
+   are checked against that tree; file contents and line-level citations are not currently read.
 
 The novelty is step 3. Most tools stop at step 2.
 
@@ -38,15 +39,16 @@ Open **`/settings`** and paste:
 - a **Gemma API key** from [Google AI Studio](https://aistudio.google.com/apikey)
 - a **GitHub token** (public read access is enough) — *optional; without it you get 60 req/hr instead of 5,000*
 
-Keys are stored in your browser and sent only to this app's server for the duration of
-a request. Nothing is written to disk. Server-side `.env` values still work and act as
-defaults, so a developer can run entirely from `.env` if they prefer.
+Keys are stored in your browser and sent to this app's server for the duration of
+a request. The model endpoint is controlled by server configuration (`LLM_BASE_URL`);
+the browser cannot redirect requests to an arbitrary host. Server `.env` values remain
+available as defaults.
 
 To make the demo deterministic (recommended on stage):
 
 ```bash
 npm run prefetch          # warm the cache for the demo scenarios
-# then set COMPASS_OFFLINE=1 in .env and restart
+# then set COMPASS_OFFLINE=1 in .env and restart; network and model calls are disabled
 ```
 
 ### How credentials flow
@@ -76,17 +78,17 @@ browser localStorage ──headers──► route handler ──► AsyncLocalSt
 | `/` | Scope form, tier toggle | — |
 | `/results` | Ranked, verified candidates | — |
 | `/guide` | Getting-started path for a chosen issue | yes |
-| `/verify` | Side door: paste any issue URL | — |
+| `/verify` | Side door: paste any issue URL | yes (semantic check, when configured) |
 | `/settings` | Bring-your-own-key setup + connection test | — |
-| `POST /api/match` | Profile → scouted repos → ranked candidates | yes (scout) |
+| `POST /api/match` | Profile → curated + live-search repos → ranked candidates | yes (scout + shortlist check) |
 | `POST /api/guide` | Repo + issue + profile → guide | yes |
 | `POST /api/verify` | Issue URL → verified verdict | — |
 | `POST /api/scope/questions` | Question bank for a tier | — |
 | `GET /api/health` | Env, cache and optional credential probe | — |
 
-**Ranking itself is deliberately LLM-free.** It is deterministic, explainable, and cannot
-be taken down by a model timeout. Gemma is used where it adds something a formula cannot:
-choosing which repositories to search, and writing the guide.
+Ranking is deterministic and explainable. When configured, Gemma's Jev check is run on a
+bounded shortlist and contributes an advisory issue-quality signal; failures fall back to
+the structural score. Gemma also chooses within the curated catalogue and writes the guide.
 
 ---
 
@@ -94,18 +96,25 @@ choosing which repositories to search, and writing the guide.
 
 ```
 Profile → REPO SCOUT → CORE REST ISSUES → VERIFY & SCORE → Rank → Explain → Guide
-          (Gemma or          (5,000 req/hr,
-           registry)          not 30/min)
+          (Gemma/registry       (Core API plus
+           plus search)         at most 2 search queries)
 ```
 
-**Two-stage discovery.** Blind keyword search hits GitHub's Search API limit (30 req/min)
-and returns abandoned forks. Instead:
+**Hybrid discovery.** GitHub Search can find issues outside the curated list, but its
+stricter quota means discovery stays bounded and supplemental:
 
-1. **Repo Scout** picks 3–5 reputable repositories from a curated registry, using Gemma
+1. **Repo Scout** picks up to five repositories from a curated registry, using Gemma
    when a key is present and tag/language overlap as a deterministic fallback.
-2. **Core REST** lists those repos' open issues — 160× the throughput of Search.
-3. Every candidate is still verified live: unassigned, uncontested, and in a repo with
-   setup docs, CI, and a history of merging outsider PRs.
+2. Two cached profile queries can add up to three new repositories from live issue results.
+   If Search is rate-limited or unavailable, the registry path still runs.
+3. **Core REST** fetches a bounded sample for curated repositories; Search results already
+   include the issue record and need repository enrichment.
+4. Candidates are checked for open/unassigned state and repository signals. Linked PR
+   checks are best-effort: if unavailable, the result explicitly reports unknown status.
+
+This is broader than the registry but not exhaustive GitHub coverage. Search is capped at
+two queries and 30 issues per query, and the app has no continuously refreshed global
+inventory. Dependable broad coverage needs scheduled ingestion and a shared index.
 
 One pipeline, two front doors. Tier 1 (newcomer) and Tier 2 (experienced) differ
 only in how much profile is collected and how much guidance is generated. The
@@ -159,7 +168,7 @@ The newcomer tier is designed for someone who has never opened a PR:
 - **Interests optional** — pick from the list or choose "Not sure — open to anything"
 - **"What's the scariest part?"** — an extra question that lets us avoid your blockers (setup, codebase, review, not sure)
 - **3 results + "Start here"** — one explicit pick with a plain-language verdict badge
-- **No jargon** — score cards show plain evidence ("unassigned, no competing PR, CONTRIBUTING.md present")
+- **No jargon** — score cards show plain evidence and identify checks whose status is unknown
 
 The experienced tier swaps to a 4-field quick form, 10 ranked results, and full numeric breakdowns.
 
@@ -171,13 +180,12 @@ The experienced tier swaps to a 4-field quick form, 10 ranked results, and full 
 
 The rubric rewards adaptability, so the extension points are real:
 
-- **Swap the model** — change the model or base URL in `/settings` (or `LLM_MODEL` /
-  `LLM_BASE_URL` in `.env`). AI Studio, OpenRouter and Ollama all speak the same
-  OpenAI-compatible protocol. No code changes.
+- **Configure the model** — set the server-side `LLM_MODEL` and `LLM_BASE_URL` values.
+  The endpoint is intentionally not user-controlled from the browser.
 - **Add a repository** — append one entry to `core/registry/repos.ts`. The Scout can then
   choose it, and live verification decides whether it is actually healthy.
 - **Replace the Scout** — `core/scout/scout.ts` has one contract: `Profile → ScoutResult`.
-  Swap in embeddings, a learned ranker, or a remote service.
+  A future implementation can query a maintained inventory or a remote discovery service.
 - **Add a signal** — add a fetch in `core/github/signals.ts` and expose it on
   `RepoSignals`. Scoring picks it up through the tier weights.
 - **Add a tier** — add one entry to `TIERS` in `core/config/tiers.ts`.
@@ -188,8 +196,8 @@ The rubric rewards adaptability, so the extension points are real:
 
 ## Scale story
 
-- Signals are cached with a TTL → index once, serve many.
-- The pipeline is stateless → horizontal scale.
-- Retrieval sits behind one module → swap the source, add a queue, keep the rest.
+- The current file cache is suitable for a single instance and a demo.
+- Production scale requires a shared database/cache and queued, scheduled discovery;
+  the current pipeline does not search all GitHub.
 
 See `PLAN.md` for the full design, scoring formulas, schedule and demo script.

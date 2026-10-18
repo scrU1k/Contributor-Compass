@@ -92,11 +92,23 @@ export function scoreCandidate(
   const evidence: Evidence[] = [];
 
   // ── fit ────────────────────────────────────────────────────────────────────
-  const fit = tagOverlap(profile, s);
+  const repoFit = tagOverlap(profile, s);
+  const issueText = `${candidate.title} ${candidate.body} ${candidate.labels.join(" ")}`.toLowerCase();
+  const typeSignals: Record<string, RegExp> = {
+    docs: /\b(doc|docs|documentation|readme|translation|localization)\b/i,
+    tests: /\b(test|tests|testing|coverage|spec|regression)\b/i,
+    design: /\b(ui|ux|css|design|accessibility|visual)\b/i,
+    translation: /\b(translation|localization|i18n|l10n)\b/i,
+    triage: /\b(triage|reproduce|reproduction|label|issue report)\b/i,
+  };
+  const selectedTypes = profile.contributionTypes.filter((type) => type !== "code");
+  const typeHits = selectedTypes.filter((type) => typeSignals[type]?.test(issueText)).length;
+  const issueTypeFit = selectedTypes.length ? (typeHits ? 1 : 0.5) : 0.5;
+  const fit = r3(repoFit * 0.8 + issueTypeFit * 0.2);
   evidence.push({
     id: "fit",
     label: "Match with your stack & interests",
-    value: opts.ignoreFit ? "not assessed (no profile)" : `${Math.round(fit * 100)}% (tags only)`,
+    value: opts.ignoreFit ? "not assessed (no profile)" : `${Math.round(fit * 100)}% (repo and issue signals)`,
     weight: weights.fit,
     source: `https://github.com/${s.fullName}`,
   });
@@ -111,9 +123,12 @@ export function scoreCandidate(
     [Boolean(s.license), 0.1, "License"],
     [s.hasCodeOfConduct, 0.05, "Code of conduct"],
   ];
-  const accessibility = clamp01(
+  let accessibility = clamp01(
     accessItems.reduce((acc, [present, w]) => acc + (present ? w : 0), 0),
   );
+  if (profile.fears.includes("setup") && !s.hasReadmeSetup) accessibility = clamp01(accessibility - 0.2);
+  if (profile.fears.includes("codebase") && s.sizeKb > 500_000) accessibility = clamp01(accessibility - 0.15);
+  if (profile.fears.includes("review") && s.mergedPRsFromOutsiders90d === 0) accessibility = clamp01(accessibility - 0.15);
   evidence.push({
     id: "accessibility",
     label: "Can you actually run it",
@@ -132,7 +147,10 @@ export function scoreCandidate(
   evidence.push({
     id: "liveness",
     label: "Will anyone merge it",
-    value: `last commit ${Math.round(daysSince(s.pushedAt))}d ago, ${s.mergedPRsFromOutsiders90d} outsider merges/90d`,
+    value: `last commit ${Math.round(daysSince(s.pushedAt))}d ago, ${
+      !s.outsiderMergeStatusKnown ? "outside-merge history unavailable" :
+      `${s.outsiderMergeSampled ? "at least " : ""}${s.mergedPRsFromOutsiders90d} outsider merges/90d`
+    }`,
     weight: weights.liveness,
     source: `https://github.com/${s.fullName}`,
   });
@@ -151,13 +169,9 @@ export function scoreCandidate(
   // scope, so their score is left alone.
   const effort = effortFromLabels(candidate.labels);
   const effortFactor =
-    profile.tier !== "newcomer"
-      ? 1
-      : effort === "large"
-        ? 0.5
-        : effort === "medium"
-          ? 0.8
-          : 1;
+    profile.timeBudget === "under-1h"
+      ? effort === "large" ? 0.35 : effort === "medium" ? 0.65 : 1
+      : profile.tier === "newcomer" && effort === "large" ? 0.5 : 1;
 
   const issueQuality = clamp01(
     (0.3 * fresh + 0.25 * unassigned + 0.25 * semanticScore + 0.2 * labelsScore) * effortFactor,
@@ -196,12 +210,14 @@ export function scoreCandidate(
 
   // ── competition ────────────────────────────────────────────────────────────
   const competition = clamp01(
-    1 / (1 + candidate.linkedOpenPRs + Math.max(0, candidate.comments - 15) / 10),
+    candidate.linkedOpenPRs === null
+      ? 0.5
+      : 1 / (1 + candidate.linkedOpenPRs + Math.max(0, candidate.comments - 15) / 10),
   );
   evidence.push({
     id: "competition",
     label: "Are you too late",
-    value: `${candidate.linkedOpenPRs} open PR(s) referencing it, ${candidate.comments} comment(s)`,
+    value: `${candidate.linkedOpenPRs === null ? "PR status unknown" : `${candidate.linkedOpenPRs} open PR(s) referencing it`}, ${candidate.comments} comment(s)`,
     weight: weights.competition,
     source: candidate.url,
   });

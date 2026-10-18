@@ -24,7 +24,7 @@ export interface ScoutedRepo {
 
 export interface ScoutResult {
   repos: ScoutedRepo[];
-  source: "gemma" | "registry";
+  source: "gemma" | "registry" | "hybrid";
 }
 
 /**
@@ -122,6 +122,7 @@ function describeProfile(profile: Profile): string {
     `Interests: ${profile.interests.join(", ") || "unspecified"}`,
     `Stack: ${profile.stack.map((s) => `${s.tech} (${s.fluency}/5)`).join(", ") || "unspecified"}`,
     `Contribution types: ${profile.contributionTypes.join(", ") || "any"}`,
+    `Avoid these blockers: ${profile.fears.join(", ") || "none stated"}`,
     `Time budget: ${profile.timeBudget}`,
     `Preferred issue size: ${profile.issueSize}`,
   ].join("\n");

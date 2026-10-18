@@ -26,12 +26,11 @@ export const env = {
   githubToken: (): string | undefined =>
     firstDefined(requestConfig()?.githubToken, process.env.GITHUB_TOKEN),
 
-  llmBaseUrl: (): string | undefined =>
-    firstDefined(requestConfig()?.llmBaseUrl, process.env.LLM_BASE_URL),
+  // Provider destination is server-controlled; never accept it from browser headers.
+  llmBaseUrl: (): string | undefined => firstDefined(process.env.LLM_BASE_URL),
   llmApiKey: (): string | undefined =>
     firstDefined(requestConfig()?.llmApiKey, process.env.LLM_API_KEY),
-  llmModel: (): string | undefined =>
-    firstDefined(requestConfig()?.llmModel, process.env.LLM_MODEL),
+  llmModel: (): string | undefined => firstDefined(process.env.LLM_MODEL),
 
   cacheDir: (): string => process.env.COMPASS_CACHE_DIR?.trim() || ".cache",
 };

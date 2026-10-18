@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getIssue, parseIssueUrl } from "@/core/github/search";
 import { getRepoSignals } from "@/core/github/signals";
-import { countPRsReferencing, getRepoOpenPRs } from "@/core/github/issues";
+import { getRepoOpenPRs, linkedPRCount } from "@/core/github/issues";
 import { toCandidate } from "@/core/candidate";
 import { minimalProfile } from "@/core/profile/defaults";
 import { scoreCandidate } from "@/core/score/readiness";
@@ -35,17 +35,20 @@ export async function POST(request: Request) {
     }
 
     try {
-      const [issue, signals, pulls] = await Promise.all([
+      const [issue, signals, pullsResult] = await Promise.all([
         getIssue(parsed.repo, parsed.number),
         getRepoSignals(parsed.repo),
-        getRepoOpenPRs(parsed.repo).catch(() => []),
+        getRepoOpenPRs(parsed.repo).catch(() => null),
       ]);
+      if (issue.state !== "open") {
+        return NextResponse.json({ error: "That issue is closed, so it is not available to start." }, { status: 409 });
+      }
 
       const candidate = toCandidate(
         issue,
         parsed.repo,
         signals,
-        countPRsReferencing(pulls, parsed.number),
+        pullsResult ? linkedPRCount(pullsResult, parsed.number) : null,
       );
 
       const profile = minimalProfile(tier);

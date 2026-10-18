@@ -15,8 +15,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export interface RequestConfig {
   githubToken?: string;
   llmApiKey?: string;
-  llmModel?: string;
-  llmBaseUrl?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestConfig>();
@@ -39,7 +37,5 @@ export function configFromRequest(request: Request): RequestConfig {
   return {
     githubToken: read("x-compass-github-token"),
     llmApiKey: read("x-compass-llm-key"),
-    llmModel: read("x-compass-llm-model"),
-    llmBaseUrl: read("x-compass-llm-base"),
   };
 }

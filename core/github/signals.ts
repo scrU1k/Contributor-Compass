@@ -101,30 +101,32 @@ export async function getRepoTreePaths(fullName: string): Promise<string[]> {
   });
 }
 
-async function countOutsiderMerges(owner: string, name: string): Promise<number> {
+async function countOutsiderMerges(owner: string, name: string): Promise<{ count: number; sampled: boolean; known: boolean }> {
   const pulls = await ghMaybe<GhPull[]>(
     `/repos/${owner}/${name}/pulls?state=closed&sort=updated&direction=desc&per_page=100`,
   );
-  if (!pulls) return 0;
+  if (!pulls) return { count: 0, sampled: false, known: false };
   const cutoff = Date.now() - 90 * 86_400_000;
-  return pulls.filter((p) => {
+  const count = pulls.filter((p) => {
     if (!p.merged_at) return false;
     if (new Date(p.merged_at).getTime() < cutoff) return false;
     return !OUTSIDER_ASSOCIATIONS.has(p.author_association ?? "");
   }).length;
+  return { count, sampled: pulls.length >= 100, known: true };
 }
 
 export async function getRepoSignals(fullName: string): Promise<RepoSignals> {
-  return cached(`signals:v1:${fullName}`, TTL_MS, () => fetchSignals(fullName));
+  return cached(`signals:v2:${fullName}`, TTL_MS, () => fetchSignals(fullName));
 }
 
 async function fetchSignals(fullName: string): Promise<RepoSignals> {
   const [owner, name] = fullName.split("/");
-  const [repo, paths, outsiders] = await Promise.all([
+  const [repo, paths, outsiderMerges] = await Promise.all([
     getRepoMeta(owner, name),
     getRepoTreePaths(fullName),
     countOutsiderMerges(owner, name),
   ]);
+  const outsiders = outsiderMerges.count;
 
   const lower = paths.map((p) => p.toLowerCase());
 
@@ -177,7 +179,7 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
   const evidence: Evidence[] = [
     {
       id: "readme",
-      label: "README with setup",
+      label: "README and install manifest",
       value: readmeSetup ? "yes" : hasReadme ? "README only" : "no",
       weight: 0.25,
       source: `https://github.com/${fullName}`,
@@ -220,7 +222,7 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
     {
       id: "outsider-merges",
       label: "Merges from outside contributors (90d)",
-      value: String(outsiders),
+      value: outsiderMerges.known ? `${outsiderMerges.sampled ? "at least " : ""}${outsiders}` : "unknown",
       weight: 0.2,
       source: `https://github.com/${fullName}/pulls?q=is%3Apr+is%3Amerged`,
     },
@@ -235,6 +237,7 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
     createdAt: repo.created_at,
     pushedAt: repo.pushed_at,
     openIssues: repo.open_issues_count ?? 0,
+    sizeKb: repo.size ?? 0,
     license,
     hasReadmeSetup: readmeSetup,
     hasContributing,
@@ -245,6 +248,8 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
     hasCodeOfConduct,
     dependencyWeight,
     mergedPRsFromOutsiders90d: outsiders,
+    outsiderMergeSampled: outsiderMerges.sampled,
+    outsiderMergeStatusKnown: outsiderMerges.known,
     medianMaintainerResponseHours: null,
     evidence,
   };

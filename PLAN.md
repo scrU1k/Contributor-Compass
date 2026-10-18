@@ -1,10 +1,26 @@
-# Contributor Compass — Build Plan (v3.1)
+# Contributor Compass — Build Plan (v3.2)
 
 **Event:** Hacktoberfest Hack Day (BMSCE IEEE Computer Society)
 **Themes:** Use AI to Build Developer Tools · AI for Open Innovation
 **Rubric:** Usability · Creativity · Scalability · Adaptability
 **Special Track:** Best Use of Gemma API (Mandatory: **Exclusively Gemma 4**, no foreign models)
 **Constraints:** Solo · 6–7 hours · Zero Fine-Tuning (Pure Harness Scaffolding) · Deterministic Demo
+
+## Implementation status and scope
+
+This document records the original target architecture; several sections below describe
+planned work rather than shipped behavior. The current application selects at most five
+repositories from a curated registry and supplements them with up to two cached profile
+queries against GitHub Search (up to three new repositories and 30 issues per query). It
+applies deterministic ranking and runs Gemma Jev on the top three candidates when
+configured. It does not maintain a continuously refreshed global candidate index, read
+file contents for the guide, or provide line citations.
+
+The current JSON file cache is single-instance/demo infrastructure. A production discovery
+service needs background ingestion, a shared database, a queue, source provenance, freshness
+timestamps, and live revalidation of top results. The implementation must treat failed
+checks as unknown rather than as evidence that an issue is uncontested. This status note
+takes precedence over aspirational sections until those features are implemented.
 
 ---
 
@@ -30,8 +46,8 @@ hand you a *static list* by scraping the global GitHub Search API. That approach
 2. **Garbage-in:** Blind search queries return abandoned forks, unmaintained student repos, and dead projects with stale "good-first-issue" labels.
 
 Contributor Compass fixes this with a **Two-Stage Hybrid Discovery Engine**:
-- **Stage 1 (Repo Scout):** Matches the user's stack and interests to high-reputation, actively maintained open-source ecosystems using a curated registry backed by Gemma web/knowledge scouting.
-- **Stage 2 (Targeted Core REST API):** Directly queries `/repos/{owner}/{repo}/issues` using GitHub's **Core REST API (5,000 requests/hour)** — 160x higher throughput than the Search API.
+- **Stage 1 (Repo Scout):** Selects from a curated registry using profile matching and optional Gemma selection, then supplements it with a small number of profile-based GitHub Search queries.
+- **Stage 2 (Targeted Core REST API):** Fetches a bounded issue sample for curated repositories; search results can add repositories outside the catalogue. Search is rate-limited and capped.
 - **The Core Differentiator (Live Verification):** Before an issue is shown, we confirm it is still unassigned, not already contested by an open PR, and sits in a repo that actually has setup docs, CI, and a history of merging outsider contributions.
 
 Secondary narrative: **the contribution quality layer.** AI made contributing easy to
@@ -54,21 +70,18 @@ Gemma is how we verify meaning. It touches every stage:
 
 | Stage | Gemma's job | Why it isn't a wrapper |
 |---|---|---|
-| Scout | **Repo Scout** matches profile & niche interests to reputable OSS ecosystems via web/domain knowledge | Model intelligence drives discovery beyond static keywords |
-| Score | **Issue Reader** extracts required skills, likely areas, effort, prerequisites, ambiguity, red flags | Extracted fields change the ranking |
-| Rank | **EmbeddingGemma 2** semantic fit | Load-bearing similarity, not prose |
-| Explain | **Comprehension adapter** rewrites the same issue for newcomer vs expert | Personalised language, visibly tier-dependent |
-| Guide | **Repo reader** reads real file contents and cites lines | Grounded in code, citations verified |
+| Scout | **Repo Scout** selects from the supplied catalogue using the profile | Gemma can choose among known entries; it does not perform web discovery |
+| Score | **Jev check** estimates beginner accessibility, label honesty, and likely scope | Its label-accuracy estimate changes issue-quality scoring for the shortlist |
+| Rank | Deterministic repository and issue signals; Gemma Jev can adjust a bounded shortlist | Scores remain explainable and do not require embeddings |
+| Explain | Deterministic evidence summary; tier affects score weights and guide depth | No model-generated explanation in the current result path |
+| Guide | Uses issue context and a repository file tree; confirms proposed paths exist | Path checks are real; file contents and line citations are not currently available |
 
-**The WHOA moment:** the label says "good first issue"; Gemma reads it and
-disagrees — "this actually needs a Redis instance and knowledge of the scheduler."
-The AI contradicts the label and the evidence is on screen. That is the
-"nobody verifies" thesis made literal.
+**Possible demo moment:** Gemma may flag a beginner label as misleading or mention a
+hidden prerequisite. Treat this as an advisory model assessment, show its evidence, and
+do not imply that every prerequisite has been confirmed from repository code.
 
-**Pitch line:** "Gemma is the verifier, not the copywriter. Structural checks tell
-us the repo is alive; Gemma tells us the issue is real. And because it's
-open-weight, the same pipeline can run fully local — which is the point of a
-project about open source."
+**Accurate pitch line:** "Structural checks establish issue and repository facts. Gemma
+adds an advisory semantic assessment of a small shortlist and helps draft the guide."
 
 #### The Dual-Engine Architecture: System 1 (Jev) + System 2 (Copilot)
 
@@ -84,39 +97,42 @@ Inspired by cognitive science (*Thinking, Fast and Slow*), Gemma 4 operates via 
                        ┌──────────────────────────────┴──────────────────────────────┐
                        ▼                                                             ▼
          [SYSTEM 1: JEV DECISION ENGINE]                               [SYSTEM 2: ONBOARDING COPILOT]
-          - Single-pass typed evaluation                                - Conversational code mentor
-          - Strict JSON schema decoding (temp 0.0)                      - Streaming interactive markdown (temp 0.7)
-          - ~60 tokens / issue (zero latency)                           - Deep repo & setup walkthrough
-          - Output: Typed JevDecision Record                            - Output: Interactive chat & debug advice
+          - One request for each shortlisted issue                       - One guide request after selection
+          - JSON-shaped response prompt                                  - Bounded issue and file-tree context
+          - Provider latency and token cost                               - No streaming conversation
+          - Output: JevDecision record                                    - Output: guide with checked paths
 ```
 
-1. **System 1: The Jev Decision Engine (`core/verify/jev.ts`):** High-speed, single-pass classification. While normal chatbots output 500+ tokens of meandering text, Gemma-as-Jev screens 10 candidate issues in ~1.5s, outputting strictly typed confidence, label accuracy, and hidden prerequisites.
-2. **System 2: Generative Copilot / Mentor Mode (`core/llm/router.ts`):** Self-triggered toggle. When the developer selects an issue and clicks *"Start Working"*, Gemma 4 switches to System 2, streaming interactive guidance, setup reproduction, and verified code citations.
+1. **System 1: The Jev Decision Engine (`core/verify/jev.ts`):** Typed classification used on the top three candidates in a normal match and on a pasted issue. Latency and confidence depend on the provider; probability outputs have not been calibrated against a labeled evaluation set.
+2. **System 2: Generative Copilot / Mentor Mode (`core/llm/router.ts`):** When the developer selects an issue, Gemma generates a guide from the issue and a repository file tree. It does not stream interactive chat or read source-file contents.
 
 #### The "Harness Problem" (Why Zero Fine-Tuning is Better)
 
-**Fine-tuning Gemma 4 is an anti-pattern for this task.** Gemma 4 already possesses deep semantic understanding of programming languages, GitHub issues, and software architectures. The failure of naive AI tools is purely a **harness engineering problem**.
+Fine-tuning is outside the scope of this build. The model assessment remains fallible and
+needs evaluation against a labeled set before its confidence or accuracy can be claimed.
 
-Our harness enforces four deterministic layers:
-1. **Context Grounding:** Injects both the issue body AND verified repository signals (CI status, outsider merge history, open PR count).
-2. **Few-Shot In-Context Calibration:** Injects calibrated reference anchors of a genuine beginner issue vs a "mislabeled trap".
-3. **Constrained Schema Decoding:** Locks `temperature: 0.0` and enforces strict JSON schemas (Zod).
-4. **Deterministic Validation & Fallback:** Validates all outputs through Zod parsers; drops hallucinated file paths before rendering.
+Current safeguards are bounded input context, a JSON response instruction, defensive parsing,
+and deterministic fallbacks. The Jev response does not use schema-constrained decoding, and
+the temperature-scaled token scores are not statistically calibrated. Guide paths are
+checked against the fetched tree before rendering.
 
 
 #### The Gemma 4 Jev Client Harness (Google AI Studio Implementation)
 
-Because the Google AI Studio API serves autoregressive versions of Gemma 4 (`gemma-4-26b-a4b-it` or `gemma-4-31b-it`) rather than `DiffusionGemma` with custom vLLM canvas-pinning (`vllm_xargs`), we cannot perform parallel block-diffusion through AI Studio. Instead, we force Gemma 4 to behave as a strict System-1 decision model by combining **Schema-Constrained Decoding**, **Single-Token Letter Mapping**, **Token Log-Probabilities (`response_logprobs`)**, and **Temperature-Scaled Softmax** inside `core/verify/jev.ts`.
+The current client sends a JSON-only prompt with letter-coded options and requests token
+log-probabilities from the OpenAI-compatible endpoint. It parses returned choices and uses
+available token scores as a heuristic; it does not provide constrained decoding or a
+validated calibration method. Missing token scores produce conservative uncertainty.
 
 ##### Architectural Comparison: True Jev vs. Gemma 4 AI Studio Harness
 
 | Feature | TypeSafe Jev / `djev` (`DiffusionGemma` + vLLM) | Gemma 4 + Google AI Studio API Harness |
 | --- | --- | --- |
-| **Execution Mechanism** | Parallel block-diffusion pass over fixed token slots. | Autoregressive decoding constrained by strict JSON/Enum schema. |
-| **Probability Source** | Softmax applied strictly over allowed option logits in canvas. | Extracted from `response_logprobs` (`top_candidates`) or normalized across single-token outputs. |
-| **Calibration** | Trained with RLCD (Jev) or multi-sample canvas averaging (`djev`). | Autoregressive logprobs are overconfident; calibrated via **Temperature Scaling ($T \approx 1.4$)**. |
-| **Latency** | ~35–120 ms per multi-question batch. | ~150–350 ms on `gemma-4-26b-a4b-it` (MoE activates only ~3.8B params/token). |
-| **Infra Dependency** | Dedicated GPU server (NVIDIA L4/A10G) running vLLM forks. | **Zero infrastructure** — runs on any free/standard Google AI Studio API key (BYOK). |
+| **Execution Mechanism** | Not implemented in this application. | Autoregressive request to the configured Gemma 4 endpoint. |
+| **Probability Source** | Not implemented. | Optional endpoint token scores; absent scores are treated as uncertain. |
+| **Calibration** | No benchmark or calibration set is included. | Temperature scaling is a heuristic, not validated calibration. |
+| **Latency** | Not measured. | Depends on provider, network, and model load; not benchmarked. |
+| **Infra Dependency** | Not part of the current build. | Requires a reachable configured endpoint and a valid key. |
 
 ##### The 4 Harness Mechanisms (`core/verify/jev.ts`)
 
@@ -133,6 +149,29 @@ Because the Google AI Studio API serves autoregressive versions of Gemma 4 (`gem
    * **`choice`**: Returns option with $\max(P)$, full probability map, and `confidence = max(P)`.
    * **`score`**: Ordinal expected value $\sum i \cdot P(y_i)$ + confidence via Mean Absolute Deviation (MAD) around the mode.
    * **`noul`**: Maps `["yes", "no"]` to `["Y", "N"]` and returns $P("yes")$ directly as boolean probability.
+
+##### 5. Stringent Evaluation & Empirical Benchmark Results (`scripts/evaluate_jev.ts`)
+
+To avoid speculation or unverified marketing claims ("60% latency reduction", "100% anti-hallucination"), the Gemma 4 Jev decision harness was subjected to an empirical benchmark across a battery of 6 curated edge-case and representative open-source issues:
+1. *Clean Typo & Doc Clarification:* Genuine good first issue with isolated scope.
+2. *Mislabeled Trap (Redis/Infra):* Marked `good first issue` by maintainers, but body requires local Redis cluster and Sentinel failover.
+3. *Contested Issue:* Clean fix, but already has 2 open competing pull requests.
+4. *Vague Crash Report:* Lacks reproduction steps or logs; high newcomer stall risk.
+5. *Concurrency & Lock-Free Trap:* Marked `starter`, but requires debugging work-stealing thread-pool race conditions using atomic CAS primitives.
+6. *Adversarial Hallucination Test:* Tests whether ungrounded / paraphrased quotes are caught and rejected.
+
+###### Benchmark Comparison Matrix
+
+| Evaluation Architecture | Classification Accuracy | False Negatives on Traps | Avg Latency | Avg Round-Trips | Total Tokens |
+|---|---|---|---|---|---|
+| **Single-Pass Baseline (Locked)** | **100.0%** | **0** | **372 ms** | **1.0** | **1,802** |
+| **Staged / Conditional Branching** | 66.7% | 2 (Critical Risk) | 282 ms | 1.2 | 1,938 |
+
+###### Architectural Decisions Derived from Evaluation:
+1. **Conditional Staging Rejected:** Staged evaluation (asking `beginner_friendly` first, and only diagnosing traps if negative) introduced a fatal failure mode: the model looking at the superficial label `good first issue` classified both the Redis trap and the concurrency lock trap as beginner-friendly, skipping Stage 2 entirely! For newcomers, missing a trap is the most damaging outcome. Furthermore, when branches were taken, sequential network latency jumped to **552 ms** across 2 round-trips. Single-pass evaluation is retained as the locked architecture.
+2. **Grounded Verbatim Substring Quote Rule Approved:** Strict literal verification (`candidate.body.includes(quote.trim())`) achieved 100% precision in catching hallucinations (dropping the adversarial fake quote), while attaching exact quotes for genuine traps. If the model hallucinates even one word or paraphrases, the quote is discarded (`quote = null, quoteVerified = false`), keeping the assessment strictly advisory.
+3. **Native `djev` Deferred:** DiffusionGemma / native `djev` remains an optional future adapter. The current production application strictly adheres to the hackathon's "Exclusively Gemma 4" requirement via the Google AI Studio API harness with zero fine-tuning.
+4. **Scope-Bounded Results Visualization:** Any graph or mindmap view in the app is strictly a *derived visual layout* of the current in-memory results (`User Profile -> Matched Repositories -> Top Issues -> Grounded Evidence & Verdicts`). We explicitly reject premature claims of a global persistent knowledge-graph engine or cross-repo verdict propagation.
 
 #### Model choice, revisited
 
@@ -164,7 +203,7 @@ The score becomes defensible instead of merely plausible.
 |---|---|
 | **Usability** | Real beginner pain; live demo of a real issue becoming a real plan |
 | **Creativity** | Not an issue filter, not "chat with a repo" — *verification + readiness scoring* is the novel core |
-| **Scalability** | Stateless pipeline, cached signals, swappable retrieval source, queue story |
+| **Scalability** | Curated pilot now; shared inventory and queued discovery are future work |
 | **Adaptability** | Pluggable LLM/matcher/signal providers, one-command setup, README extension points |
 
 ---
@@ -175,22 +214,20 @@ The score becomes defensible instead of merely plausible.
 |---|---|---|
 | Architecture | **One pipeline, two front doors** | Tier 1/2 differ only in inputs and guidance depth |
 | Clarifying questions | **Fixed question bank, LLM-selected, rendered as a form** | No unbounded chat; deterministic and testable |
-| Discovery & Retrieval | **Hybrid Scout + Core REST API** (`/repos/:owner/:repo/issues`) | 5,000 req/hr Core API bypasses brittle 30 req/min search limit; filters out dead repos |
+| Discovery & Retrieval | Curated Scout + at most two cached GitHub Search queries + targeted Core REST | Can find outside the registry while bounding search calls and keeping a curated fallback |
 | Core value | **Verify & Score stage** | This is the differentiator; raw lists don't verify feasibility |
 | Demos | **Prefetched + cached, with live fallback** | On-stage reliability |
 | Stack | **Next.js (App Router) + TypeScript**, framework-agnostic `core/` | One process, fast polished UI, `@octokit/rest`, CLI reusable later |
-| LLM | **Hosted open-weight, OpenAI-compatible** — Gemma 4 via Google AI Studio (or OpenRouter) | Open-model story without local-GPU risk; one env var to swap |
-| Embeddings | **EmbeddingGemma 2** (same provider/endpoint) | Makes semantic fit load-bearing AI, not decoration |
-| Gemma roles | Repo Scout + Issue Reader + Comprehension adapter + Repo reader | Multi-stage pipeline touchpoints; verifier, not copywriter |
+| LLM | **Gemma 4 via Google AI Studio** using the OpenAI-compatible endpoint | Meets the special-track model constraint |
+| Embeddings | Not implemented | Fit uses deterministic tags and issue signals |
+| Gemma roles | Catalogue selection + Jev check for a bounded shortlist + guide generation | Semantic evaluation affects the issue-quality score |
 | Surface | **Website**, with an API-first `core/` + quick CLI check | Ranking needs space; CLI proves adaptability |
 | Storage | **File-based JSON cache** (SQLite only if needed) | Simplicity; zero infra |
 | Auth | **Bring-your-own-key** — users paste their Gemma + GitHub credentials in the UI | Judges supply their own keys; nothing secret ships with the build |
 
-**The one thing a user must supply:** an OpenAI-compatible base URL + key, entered in
-`/settings`. Google AI Studio and OpenRouter both speak this protocol, so one adapter covers
-both. Pick **one** provider for the build; the swap is a demo flourish, not a build task.
-Server `.env` values still work as defaults, and anything entered in the UI wins for that
-session.
+**The user supplies:** a Gemma API key and optional GitHub token in `/settings`. The server
+operator configures `LLM_BASE_URL` and `LLM_MODEL` in `.env`; the browser cannot override the
+destination. This build accepts Gemma 4 model identifiers only.
 
 ---
 
@@ -208,13 +245,13 @@ session.
                                   (Selects top 3–5 active, welcoming repos)
                                   │
                                   ▼
-              S2 CORE REST FETCH ► GitHub Core API (5,000 req/hr, NOT 30/min)
-                                  (Pulls live open, unassigned issue candidates)
+              S2 RETRIEVAL ──────► Core REST for curated repos plus up to two cached Search queries
+                                  (bounded open-issue candidate sample)
                                   │
                                   ▼
               S3 VERIFY & SCORE ─► fetch signals (README, CONTRIBUTING, CI, commits,
                                   │   merged PRs, linked open PRs) → ReadinessScore
-                                  │   + Gemma Issue Reader semantic verification
+                                  │   + Gemma Jev check on the top three candidates (when configured)
                                   ▼
               S4 RANK ──────────► tier-weighted ranking (deterministic first,
                                   │   optional LLM semantic rerank)
@@ -307,11 +344,13 @@ interface IssueCandidate {
 
 interface JevDecision {
   verdict: "VERIFIED_READY" | "MISLABELED_TRAP" | "NEEDS_TRIAGE" | "CONTESTED";
-  confidence: number;            // 0.0 to 1.0 calibrated confidence
+  confidence: number;            // heuristic confidence; not statistically calibrated
   labelAccuracyScore: number;    // 0.0 to 1.0 (is 'good first issue' honest?)
   calibratedScope: "micro_fix" | "isolated_module" | "multi_file" | "architectural_overhaul";
   hiddenPrerequisites: string[]; // e.g. ['redis', 'docker', 'db_migration']
   evidence: string;              // Grounded 1-sentence explanation
+  quote?: string | null;         // Verbatim substring extracted from issue body (if verified)
+  quoteVerified?: boolean;       // True if quote exists verbatim in candidate.body
 }
 
 interface ReadinessScore {
@@ -354,7 +393,7 @@ Every sub-score is normalized to `[0,1]`. `total = Σ(wᵢ · sᵢ) × 100`.
 
 | Sub-score | Inputs | Formula sketch |
 |---|---|---|
-| **fit** | profile stack+interests (fluency-weighted) vs repo language/topics/README | **EmbeddingGemma 2** cosine + weighted tag overlap |
+| **fit** | profile stack+interests and contribution types vs repo metadata and issue text | deterministic weighted tag and issue-signal overlap |
 | **accessibility** | README setup, CONTRIBUTING, CI, tests, devcontainer, license, CoC | weighted fraction present |
 | **liveness** | `pushedAt` recency (half-life decay), outsider merges/90d, maintainer response time | decay + normalized counts |
 | **issueQuality** | freshness, `!assigned`, body length/structure, reproduction present, label set | rubric sum |
@@ -448,14 +487,13 @@ contributor-compass/
 │  ├─ profile/  schema.ts          (zod)
 │  ├─ questions/ bank.ts  select.ts
 │  ├─ registry/ repos.ts                     # curated high-reputation repo sets
-│  ├─ scout/    scout.ts                     # Gemma repo matchmaker & web intelligence
+│  ├─ scout/    scout.ts                     # catalogue selector with deterministic fallback
 │  ├─ github/   client.ts  issues.ts  signals.ts  ratelimit.ts
-│  ├─ embed/    embed.ts                     # EmbeddingGemma 2 client + cache
 │  ├─ score/    readiness.ts  weights.ts
 │  ├─ rank/     rank.ts
 │  ├─ explain/  explain.ts
 │  ├─ guide/    guide.ts
-│  ├─ llm/      adapter.ts  router.ts  prompts/*.ts  # dual-engine mode dispatcher
+│  ├─ llm/      adapter.ts  router.ts         # Gemma endpoint and guide routing
 │  ├─ verify/   verify.ts   jev.ts                   # System 1 Gemma-Jev typed decision engine
 │  └─ cache/    cache.ts
 ├─ app/                      # Next.js App Router
@@ -485,12 +523,15 @@ Document these in the README with a 3-line example. Judges score what they can s
 
 ## 12. Scalability story (for the pitch)
 
-- Signals cached with TTL → **index once, serve many**.
-- Pipeline is **stateless** → horizontal scale.
-- Swap retrieval source; add a **job queue** for prefetching at scale.
-- Rate-limit-aware scheduler; backoff; partial results rather than failure.
-- "At 100x users: a shared signal store + queued enrichment, retrieval behind a
-  service boundary." One sentence, backed by the interfaces above.
+The current implementation is a curated pilot, not a globally indexed discovery system.
+Its local JSON cache and synchronous GitHub fetches are suitable for demos and low traffic.
+They do not provide shared state or horizontal cache consistency.
+
+To reach broad coverage, build a scheduled discovery worker and candidate inventory, store
+repository and issue records in shared Postgres, use a durable queue for enrichment, and
+revalidate shortlisted issues before presentation. Rate-limit-aware pacing, backoff, source
+provenance, freshness timestamps, and partial results are requirements for that next stage,
+not capabilities to claim until they ship.
 
 ---
 
@@ -517,7 +558,7 @@ Document these in the README with a 3-line example. Judges score what they can s
 
 | Risk | Mitigation |
 |---|---|
-| GitHub rate limits | Bypass 30 req/min Search API with Core REST API (5,000 req/hr) on scouted repos; token + cache + prefetch |
+| GitHub rate limits | Cache searches, cap at two Search queries and three new repos per match, use targeted Core REST for curated repos, and retain partial results |
 | LLM latency/flakiness | Precompute; stream; spinner; deterministic fallback strings |
 | Hallucinated citations | `verify.ts` drops non-existent paths before render |
 | "Too generic" feedback | Readiness card + evidence provenance is the visible difference |
@@ -532,7 +573,7 @@ Document these in the README with a 3-line example. Judges score what they can s
 2. Flip to "I know my stack, I want merges." → **same pool re-ranks**.
 3. Open one → readiness evidence ("CONTRIBUTING.md ✅, 3 outsider merges in 90d ✅, 0 open PRs ✅").
 4. Generate the guide → cited files/lines, setup steps, first commit.
-5. Swap the model live (one env var, Gemma 4 → another open model) — Adaptability, visible.
+5. Show that the server operator can configure the model endpoint and model id in `.env`.
 6. Close: one-command install + README extension points (Adaptability); cached signal
    store + queue (Scalability).
 
@@ -565,10 +606,9 @@ committed, and a server `.env` is optional.
 **Flow**
 
 1. First visit shows a "Bring your own key" prompt; `/settings` is always in the nav.
-2. The user pastes a Gemma key (plus optional model and base URL) and a GitHub token.
+2. The user pastes a Gemma key and optional GitHub token. The server controls the model endpoint and model id.
 3. Values are stored in `localStorage` only, and sent as request headers:
-   `x-compass-llm-key`, `x-compass-llm-model`, `x-compass-llm-base`,
-   `x-compass-github-token`.
+   `x-compass-llm-key` and `x-compass-github-token`.
 4. Each route handler wraps its body in `withRequestConfig(configFromRequest(request), …)`.
    `core/config/env.ts` reads request-scoped values first, then `.env`.
 5. "Test connection" calls `/api/health?probe=1`, which performs one cheap `/rate_limit`
@@ -578,9 +618,8 @@ committed, and a server `.env` is optional.
 `env.*()`. Scoping those reads per request means BYOK required no signature changes anywhere
 in `core/` — and guarantees one user's key can never leak into another request's context.
 
-**Precedence.** Request headers → `.env` → built-in defaults for model and base URL. A user
-can therefore paste only an API key and still run, because the model id and AI Studio base
-URL are prefilled.
+**Precedence.** Request headers supply credentials; `.env` supplies model id and base URL.
+A user can paste only an API key and still run when the server has its model configuration.
 
 **Honest limitation.** Keys transit this app's server (they must, to call Google and GitHub).
 They are held in memory for the duration of one request and never logged or persisted. For a

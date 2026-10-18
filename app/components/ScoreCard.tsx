@@ -5,7 +5,7 @@ const LABELS: [ScoreKey, string][] = [
   ["accessibility", "Can run it"],
   ["liveness", "Gets merged"],
   ["issueQuality", "Issue quality"],
-  ["competition", "Uncontested"],
+  ["competition", "PR status"],
   ["setupCost", "Light setup"],
 ];
 

@@ -48,6 +48,8 @@ export function explainDeterministic(candidate: RankedCandidate, profile: Profil
   }
   if (!candidate.assigned && candidate.linkedOpenPRs === 0) {
     bits.push("it's unassigned with no open PR competing for it");
+  } else if (candidate.linkedOpenPRs === null) {
+    bits.push("the competing PR check could not be confirmed");
   }
   if (s.hasReadmeSetup && s.hasContributing) {
     bits.push("setup and contribution docs are both present");
@@ -64,7 +66,7 @@ export async function rankCandidates(
 ): Promise<RankedCandidate[]> {
   // No embeddings — fit is pure tag overlap
   const scored: RankedCandidate[] = candidates.map((candidate) => {
-    const score = scoreCandidate(candidate, profile);
+    const score = scoreCandidate(candidate, profile, { jev: candidate.jevDecision });
     const ranked: RankedCandidate = {
       ...candidate,
       score,
@@ -75,5 +77,20 @@ export async function rankCandidates(
   });
 
   scored.sort((a, b) => b.score.total - a.score.total || a.number - b.number);
-  return scored.slice(0, limit);
+  const diversified: RankedCandidate[] = [];
+  const counts = new Map<string, number>();
+  const remaining: RankedCandidate[] = [];
+  for (const candidate of scored) {
+    const key = candidate.repo.toLowerCase();
+    const count = counts.get(key) ?? 0;
+    if (count < 2 && diversified.length < limit) {
+      diversified.push(candidate);
+      counts.set(key, count + 1);
+    } else {
+      remaining.push(candidate);
+    }
+  }
+  // Small candidate pools can have fewer than five repositories; fill remaining
+  // places by score rather than returning an artificially short list.
+  return [...diversified, ...remaining].slice(0, limit);
 }
