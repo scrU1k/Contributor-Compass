@@ -62,6 +62,22 @@ export function plainSummary(candidate: RankedCandidate): string {
 export type Verdict = { label: string; tone: "good" | "warn" | "bad" };
 
 export function verdict(candidate: RankedCandidate): Verdict {
+  const jev = candidate.score.jevDecision ?? candidate.jevDecision;
+  if (jev) {
+    if (jev.verdict === "MISLABELED_TRAP") {
+      return { label: `⚠️ Trap: ${jev.calibratedScope.replace(/_/g, " ")}`, tone: "bad" };
+    }
+    if (jev.verdict === "CONTESTED") {
+      return { label: "Contested / Assigned", tone: "bad" };
+    }
+    if (jev.verdict === "VERIFIED_READY") {
+      return { label: "Jev Verified Ready", tone: "good" };
+    }
+    if (jev.verdict === "NEEDS_TRIAGE") {
+      return { label: "Needs Maintainer Triage", tone: "warn" };
+    }
+  }
+
   const s = candidate.score;
   if (s.total >= 68 && s.competition >= 0.6 && s.accessibility >= 0.6) {
     return { label: "Ready to start", tone: "good" };
@@ -76,6 +92,15 @@ export function verdict(candidate: RankedCandidate): Verdict {
 export function plainEvidence(candidate: RankedCandidate): string[] {
   const s = candidate.signals;
   const out: string[] = [];
+
+  const jev = candidate.score.jevDecision ?? candidate.jevDecision;
+  if (jev) {
+    if (jev.verdict === "MISLABELED_TRAP") {
+      out.push(`⚠️ Gemma-Jev: ${jev.evidence}`);
+    } else if (jev.verdict === "VERIFIED_READY") {
+      out.push(`✅ Gemma-Jev: ${jev.evidence}`);
+    }
+  }
 
   if (s.hasReadmeSetup) out.push("Setup is documented");
   if (s.hasContributing) out.push("Has a contribution guide");

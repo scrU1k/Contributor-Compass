@@ -1,6 +1,7 @@
 import type {
   Evidence,
   IssueCandidate,
+  JevDecision,
   Profile,
   ReadinessScore,
   RepoSignals,
@@ -20,6 +21,8 @@ import { effortFromLabels } from "@/core/format/effort";
 export interface ScoreOptions {
   /** Verification side door: personal fit is not assessed, so it is excluded. */
   ignoreFit?: boolean;
+  /** Gemma-Jev System-1 decision record. */
+  jev?: JevDecision;
 }
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
@@ -137,8 +140,11 @@ export function scoreCandidate(
   // ── issue quality ──────────────────────────────────────────────────────────
   const fresh = Math.exp(-daysSince(candidate.updatedAt) / 45);
   const unassigned = candidate.assigned ? 0.35 : 1;
-  const bodyScore = clamp01(candidate.body.length / 600);
   const labelsScore = candidate.labels.length > 0 ? 1 : 0.4;
+
+  // If a Gemma-Jev decision is available, semantic verification replaces dumb body length!
+  const jev = opts.jev ?? candidate.score?.jevDecision;
+  const semanticScore = jev ? jev.labelAccuracyScore : clamp01(candidate.body.length / 600);
 
   // A large-effort issue is not a first PR, however well written it is. The
   // newcomer tier exists to protect exactly that; experienced users asked for
@@ -154,14 +160,30 @@ export function scoreCandidate(
           : 1;
 
   const issueQuality = clamp01(
-    (0.3 * fresh + 0.25 * unassigned + 0.25 * bodyScore + 0.2 * labelsScore) * effortFactor,
+    (0.3 * fresh + 0.25 * unassigned + 0.25 * semanticScore + 0.2 * labelsScore) * effortFactor,
   );
+
+  if (jev) {
+    evidence.push({
+      id: "jev-verification",
+      label: "Gemma-Jev Semantic Check",
+      value:
+        jev.verdict === "MISLABELED_TRAP"
+          ? `⚠️ Trap (${Math.round(jev.confidence * 100)}% conf): ${jev.evidence}`
+          : jev.verdict === "VERIFIED_READY"
+            ? `✅ Verified (${Math.round(jev.confidence * 100)}% conf): ${jev.evidence}`
+            : `${jev.verdict}: ${jev.evidence}`,
+      weight: 0.35,
+      source: "Gemma 4 Jev Harness",
+    });
+  }
+
   evidence.push({
     id: "issue-quality",
     label: "Is the issue doable",
     value: [
       candidate.assigned ? "already assigned" : "unassigned",
-      candidate.body.length < 120 ? "thin description" : "described",
+      jev ? `Jev: ${jev.verdict}` : candidate.body.length < 120 ? "thin description" : "described",
       effort !== "unknown"
         ? `labelled ${effort} effort`
         : candidate.labels.length
@@ -214,5 +236,6 @@ export function scoreCandidate(
     total,
     weights,
     evidence,
+    jevDecision: jev,
   };
 }

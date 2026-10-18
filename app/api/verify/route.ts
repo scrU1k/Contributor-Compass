@@ -6,6 +6,7 @@ import { toCandidate } from "@/core/candidate";
 import { minimalProfile } from "@/core/profile/defaults";
 import { scoreCandidate } from "@/core/score/readiness";
 import { explainDeterministic } from "@/core/rank/rank";
+import { evaluateIssueWithJev } from "@/core/verify/jev";
 import { configFromRequest, withRequestConfig } from "@/core/config/requestConfig";
 import type { RankedCandidate, Tier } from "@/core/types";
 
@@ -48,12 +49,16 @@ export async function POST(request: Request) {
       );
 
       const profile = minimalProfile(tier);
+      // Run Gemma 4 Jev decision harness
+      const jev = await evaluateIssueWithJev(candidate, signals).catch(() => undefined);
+
       const scored: RankedCandidate = {
         ...candidate,
-        score: scoreCandidate(candidate, profile, { ignoreFit: true }),
+        score: scoreCandidate(candidate, profile, { ignoreFit: true, jev }),
         why: "",
+        jevDecision: jev,
       };
-      scored.why = explainDeterministic(scored, profile);
+      scored.why = jev?.evidence || explainDeterministic(scored, profile);
 
       return NextResponse.json({ candidate: scored });
     } catch (error) {

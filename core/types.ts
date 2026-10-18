@@ -98,6 +98,7 @@ export interface IssueCandidate {
   /** Semantic + tag fit, computed before scoring. */
   fit?: number;
   score?: ReadinessScore;
+  jevDecision?: JevDecision;
 }
 
 export type ScoreKey =
@@ -110,6 +111,15 @@ export type ScoreKey =
 
 export type ScoreWeights = Record<ScoreKey, number>;
 
+export interface JevDecision {
+  verdict: "VERIFIED_READY" | "MISLABELED_TRAP" | "NEEDS_TRIAGE" | "CONTESTED";
+  confidence: number;            // 0.0 to 1.0 calibrated confidence
+  labelAccuracyScore: number;    // 0.0 to 1.0 (is 'good first issue' honest?)
+  calibratedScope: "micro_fix" | "isolated_module" | "multi_file" | "architectural_overhaul";
+  hiddenPrerequisites: string[]; // e.g. ['redis', 'docker', 'db_migration']
+  evidence: string;              // Grounded 1-sentence explanation
+}
+
 export interface ReadinessScore {
   fit: number;
   accessibility: number;
@@ -121,6 +131,7 @@ export interface ReadinessScore {
   total: number;
   weights: ScoreWeights;
   evidence: Evidence[];
+  jevDecision?: JevDecision;
 }
 
 export interface RankedCandidate extends IssueCandidate {

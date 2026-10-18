@@ -1,4 +1,4 @@
-# Contributor Compass — Build Plan (v3.0)
+# Contributor Compass — Build Plan (v3.1)
 
 **Event:** Hacktoberfest Hack Day (BMSCE IEEE Computer Society)
 **Themes:** Use AI to Build Developer Tools · AI for Open Innovation
@@ -102,6 +102,37 @@ Our harness enforces four deterministic layers:
 2. **Few-Shot In-Context Calibration:** Injects calibrated reference anchors of a genuine beginner issue vs a "mislabeled trap".
 3. **Constrained Schema Decoding:** Locks `temperature: 0.0` and enforces strict JSON schemas (Zod).
 4. **Deterministic Validation & Fallback:** Validates all outputs through Zod parsers; drops hallucinated file paths before rendering.
+
+
+#### The Gemma 4 Jev Client Harness (Google AI Studio Implementation)
+
+Because the Google AI Studio API serves autoregressive versions of Gemma 4 (`gemma-4-26b-a4b-it` or `gemma-4-31b-it`) rather than `DiffusionGemma` with custom vLLM canvas-pinning (`vllm_xargs`), we cannot perform parallel block-diffusion through AI Studio. Instead, we force Gemma 4 to behave as a strict System-1 decision model by combining **Schema-Constrained Decoding**, **Single-Token Letter Mapping**, **Token Log-Probabilities (`response_logprobs`)**, and **Temperature-Scaled Softmax** inside `core/verify/jev.ts`.
+
+##### Architectural Comparison: True Jev vs. Gemma 4 AI Studio Harness
+
+| Feature | TypeSafe Jev / `djev` (`DiffusionGemma` + vLLM) | Gemma 4 + Google AI Studio API Harness |
+| --- | --- | --- |
+| **Execution Mechanism** | Parallel block-diffusion pass over fixed token slots. | Autoregressive decoding constrained by strict JSON/Enum schema. |
+| **Probability Source** | Softmax applied strictly over allowed option logits in canvas. | Extracted from `response_logprobs` (`top_candidates`) or normalized across single-token outputs. |
+| **Calibration** | Trained with RLCD (Jev) or multi-sample canvas averaging (`djev`). | Autoregressive logprobs are overconfident; calibrated via **Temperature Scaling ($T \approx 1.4$)**. |
+| **Latency** | ~35–120 ms per multi-question batch. | ~150–350 ms on `gemma-4-26b-a4b-it` (MoE activates only ~3.8B params/token). |
+| **Infra Dependency** | Dedicated GPU server (NVIDIA L4/A10G) running vLLM forks. | **Zero infrastructure** — runs on any free/standard Google AI Studio API key (BYOK). |
+
+##### The 4 Harness Mechanisms (`core/verify/jev.ts`)
+
+1. **Thinking Suppression & Greedy Decoding:**
+   * Rigid system instruction: *"You are a deterministic System-1 decision classifier. Output ONLY the JSON object mapping each question key to its single-letter option code."*
+   * Disables `<|think|>` tags, enforces `temperature: 0.0`.
+2. **Single-Token Letter Mapping:**
+   * Multi-token option labels (e.g., `"completely_misleading_trap"`) are mapped to single ASCII characters (`"A"`, `"B"`, `"C"`) before evaluation, collapsing joint prefix-tree computations into a single token step.
+3. **Logprob Extraction & Temperature Scaling ($T \approx 1.4$):**
+   * If `response_logprobs` are returned, extracts logits $\ell_i$ across candidate letters and applies temperature scaling:
+     $$P(y_i) = \frac{\exp(\ell_i / T)}{\sum_j \exp(\ell_j / T)}$$
+   * Graceful fallback: If logprobs are unavailable on a given tier, falls back to argmax $P=1.0 / 0.0$.
+4. **Deterministic Jev Primitives Math in TypeScript:**
+   * **`choice`**: Returns option with $\max(P)$, full probability map, and `confidence = max(P)`.
+   * **`score`**: Ordinal expected value $\sum i \cdot P(y_i)$ + confidence via Mean Absolute Deviation (MAD) around the mode.
+   * **`noul`**: Maps `["yes", "no"]` to `["Y", "N"]` and returns $P("yes")$ directly as boolean probability.
 
 #### Model choice, revisited
 
