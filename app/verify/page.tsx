@@ -19,47 +19,123 @@ export interface OrgCoverageInfo {
   selectedRepos: string[];
 }
 
-export default function VerifyPage() {
+const QUICK_TAG_SUGGESTIONS = [
+  "good first issue",
+  "documentation",
+  "bug",
+  "python",
+  "typescript",
+  "rust",
+];
+
+export default function FindByLinkPage() {
   const router = useRouter();
-  const [url, setUrl] = useState("");
+  const [urls, setUrls] = useState<string[]>([""]);
+  const [tagsInput, setTagsInput] = useState<string>("");
   const [tier, setTier] = useState<Tier>("newcomer");
   const [candidates, setCandidates] = useState<RankedCandidate[]>([]);
-  const [orgCoverage, setOrgCoverage] = useState<OrgCoverageInfo | null>(null);
+  const [orgsCoverage, setOrgsCoverage] = useState<OrgCoverageInfo[]>([]);
+  const [partialErrors, setPartialErrors] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function handleUrlChange(index: number, value: string) {
+    setUrls((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function addUrlField() {
+    setUrls((prev) => [...prev, ""]);
+  }
+
+  function removeUrlField(index: number) {
+    setUrls((prev) => {
+      if (prev.length <= 1) return [""];
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  function addQuickTag(tag: string) {
+    const existing = tagsInput
+      .split(",")
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    if (!existing.includes(tag.toLowerCase())) {
+      const updated = existing.length > 0 ? `${tagsInput.trim()}, ${tag}` : tag;
+      setTagsInput(updated);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setPartialErrors([]);
     setCandidates([]);
-    setOrgCoverage(null);
+    setOrgsCoverage([]);
+
+    const cleanUrls = urls.map((u) => u.trim()).filter(Boolean);
+    if (cleanUrls.length === 0) {
+      setError("Please enter at least one GitHub issue, repository, or organization link.");
+      return;
+    }
+
     setLoading(true);
+
+    const cleanTags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
 
     try {
       const response = await fetch("/api/verify", {
         method: "POST",
         headers: { "content-type": "application/json", ...settingsHeaders() },
-        body: JSON.stringify({ url, tier }),
+        body: JSON.stringify({
+          urls: cleanUrls,
+          tags: cleanTags,
+          tier,
+        }),
       });
       const data = (await response.json()) as {
-        mode?: "issue" | "repo" | "org";
-        candidate?: RankedCandidate;
         candidates?: RankedCandidate[];
+        orgs?: OrgCoverageInfo[];
         org?: OrgCoverageInfo;
+        errors?: string[];
         error?: string;
       };
-      if (!response.ok) throw new Error(data.error ?? "Could not verify that GitHub target");
-      setCandidates(data.candidates ?? (data.candidate ? [data.candidate] : []));
-      setOrgCoverage(data.org ?? null);
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not verify the requested GitHub targets");
+      }
+
+      setCandidates(data.candidates ?? []);
+      setOrgsCoverage(data.orgs ?? (data.org ? [data.org] : []));
+      if (data.errors && data.errors.length > 0) {
+        setPartialErrors(data.errors);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : "Something went wrong during verification");
     } finally {
       setLoading(false);
     }
   }
 
   function open(selected: RankedCandidate) {
-    sessionStorage.setItem("compass.profile", JSON.stringify(minimalProfile(tier)));
+    const cleanTags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const baseProfile = minimalProfile(tier);
+    if (cleanTags.length > 0) {
+      baseProfile.stack = cleanTags.map((t) => ({ tech: t, fluency: 3 as const }));
+      baseProfile.interests = cleanTags;
+    }
+
+    sessionStorage.setItem("compass.profile", JSON.stringify(baseProfile));
     sessionStorage.setItem("compass.selected", JSON.stringify(selected));
     router.push("/guide");
   }
@@ -67,81 +143,197 @@ export default function VerifyPage() {
   return (
     <>
       <SiteHeader />
-      <main className="container narrow">
+      <main className="container narrow" style={{ paddingBottom: "4rem" }}>
         <section className="hero" style={{ paddingBottom: "1.5rem" }}>
-          <p className="eyebrow">Side door</p>
-          <h1>Have a specific issue or organization in mind?</h1>
+          <p className="eyebrow">Direct GitHub Verification</p>
+          <h1>Find by Link</h1>
           <p className="lede">
-            Paste an issue link to check its feasibility, or enter an organization (e.g.{" "}
-            <code>github.com/openstreetmap</code>) to discover and verify its best starter issues.
-            We verify assignment, competing PRs, setup docs, and semantic traps before you begin.
+            Have specific projects or issues in mind? Paste one or multiple GitHub links below to verify
+            unassigned starter issues, avoid competing PRs, inspect newcomer docs, and check feasibility before you write code.
           </p>
         </section>
 
-        <form className="panel" onSubmit={submit}>
+        <form className="panel" onSubmit={submit} style={{ display: "grid", gap: "1.25rem" }}>
           <div className="field">
-            <label className="field-label" htmlFor="issue-url">
-              GitHub issue, repo, or organization URL
-            </label>
-            <p className="field-hint">
-              Examples: <code>github.com/openstreetmap</code>, <code>pallets/flask</code>, or{" "}
-              <code>github.com/owner/repo/issues/123</code>
-            </p>
-            <div className="url-form">
-              <input
-                id="issue-url"
-                className="input"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://github.com/openstreetmap"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <button type="submit" className="btn btn-primary" disabled={loading || !url.trim()}>
-                {loading ? "Checking…" : "Verify & Find"}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label className="field-label" style={{ margin: 0 }}>
+                GitHub Target Links ({urls.length})
+              </label>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={addUrlField}
+                style={{
+                  fontSize: "0.78rem",
+                  padding: "4px 10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  border: "1px dashed var(--accent)",
+                  color: "var(--accent)",
+                }}
+                title="Add another GitHub link"
+              >
+                <span style={{ fontSize: "1rem", lineHeight: 1 }}>+</span> Add another link
               </button>
+            </div>
+            <p className="field-hint" style={{ marginTop: 0, marginBottom: "10px" }}>
+              Accepts issues (<code>pallets/flask#5555</code> or full URL), repositories (<code>facebook/react</code>), or organizations (<code>openstreetmap</code>).
+            </p>
+
+            <div style={{ display: "grid", gap: "8px" }}>
+              {urls.map((val, idx) => (
+                <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    className="input"
+                    value={val}
+                    onChange={(e) => handleUrlChange(idx, e.target.value)}
+                    placeholder={
+                      idx === 0
+                        ? "e.g. pallets/flask, https://github.com/facebook/react/issues/123, or openstreetmap"
+                        : "e.g. rust-lang/rust or owner/repo#456"
+                    }
+                    autoComplete="off"
+                    spellCheck={false}
+                    style={{ flex: 1 }}
+                  />
+                  {urls.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => removeUrlField(idx)}
+                      style={{ padding: "8px 12px", color: "var(--warn, #e5b567)" }}
+                      title="Remove this link"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="field" style={{ marginTop: "1.25rem" }}>
+          {/* Custom Tags Section */}
+          <div className="field" style={{ borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
+            <label className="field-label" htmlFor="custom-tags">
+              Custom Tags & Focus Areas (Optional)
+            </label>
+            <p className="field-hint" style={{ marginTop: 2, marginBottom: 8 }}>
+              Prioritize or filter issues matching specific labels, languages, or keywords.
+            </p>
+            <input
+              id="custom-tags"
+              className="input"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="e.g. good first issue, docs, python, bug"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px", alignItems: "center" }}>
+              <span className="subtle" style={{ fontSize: "0.75rem", marginRight: "4px" }}>
+                Quick tags:
+              </span>
+              {QUICK_TAG_SUGGESTIONS.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className="badge neutral"
+                  onClick={() => addQuickTag(tag)}
+                  style={{ cursor: "pointer", background: "var(--card)", border: "1px solid var(--line)" }}
+                >
+                  + {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tier Toggle */}
+          <div className="field" style={{ borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
             <span className="field-label">How much detail do you want?</span>
             <TierToggle value={tier} onChange={setTier} />
           </div>
 
           {error && <p className="error">{error}</p>}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.5rem" }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading || urls.every((u) => !u.trim())}
+              style={{ padding: "8px 24px", fontSize: "0.92rem" }}
+            >
+              {loading ? "Checking & Verifying…" : `Verify & Find Issues (${urls.filter((u) => u.trim()).length || 1}) ➔`}
+            </button>
+          </div>
         </form>
 
-        {orgCoverage && (
+        {/* Partial warnings if some links failed */}
+        {partialErrors.length > 0 && (
           <div
             className="panel"
             style={{
-              marginTop: "1.5rem",
-              background: "var(--card-bg, #1a1f2c)",
-              border: "1px solid var(--border-color, #2d3748)",
+              marginTop: "1.25rem",
+              background: "rgba(229, 181, 103, 0.08)",
+              border: "1px solid var(--warn, #e5b567)",
+              borderRadius: "8px",
+              padding: "0.85rem 1.15rem",
+            }}
+          >
+            <strong style={{ color: "var(--warn, #e5b567)", fontSize: "0.86rem", display: "block", marginBottom: "4px" }}>
+              ⚠️ Notice: Some links could not be verified
+            </strong>
+            <ul style={{ margin: 0, paddingLeft: "1.2rem", fontSize: "0.8rem", color: "var(--fg)" }}>
+              {partialErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Organization Coverage Cards */}
+        {orgsCoverage.map((orgCoverage) => (
+          <div
+            key={orgCoverage.owner}
+            className="panel"
+            style={{
+              marginTop: "1.25rem",
+              background: "var(--card)",
+              border: "1px solid var(--line)",
+              borderRadius: "8px",
+              padding: "1rem 1.25rem",
             }}
           >
             <p style={{ margin: 0, fontWeight: 600 }}>
               🏢 {orgCoverage.ownerType}:{" "}
-              <a href={`https://github.com/${orgCoverage.owner}`} target="_blank" rel="noreferrer">
+              <a href={`https://github.com/${orgCoverage.owner}`} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
                 {orgCoverage.ownerName}
               </a>
             </p>
-            <p className="subtle" style={{ margin: "0.4rem 0 0" }}>
-              Budgeted scan: evaluated {orgCoverage.selectedRepos.length} most active of{" "}
-              {orgCoverage.totalPublicRepos} public repositories (
-              {orgCoverage.selectedRepos.map((r) => r.split("/")[1]).join(", ")}) — found{" "}
-              {candidates.length} verified candidate issue{candidates.length === 1 ? "" : "s"}.
+            <p className="subtle" style={{ margin: "0.4rem 0 0", fontSize: "0.82rem" }}>
+              Evaluated {orgCoverage.selectedRepos.length} most active repositories (
+              {orgCoverage.selectedRepos.map((r) => r.split("/")[1] || r).join(", ")}) of{" "}
+              {orgCoverage.totalPublicRepos} public repos.
             </p>
           </div>
-        )}
+        ))}
 
+        {/* Candidate Results */}
         {candidates.length > 0 && (
           <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <p className="subtle" style={{ marginBottom: 4 }}>
-              {candidates.length === 1
-                ? "Personal fit isn't assessed here — this is about whether the issue is doable."
-                : `Showing ${candidates.length} verified issue${candidates.length === 1 ? "" : "s"} ranked by readiness:`}
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+              <p className="subtle" style={{ margin: 0, fontWeight: 600 }}>
+                {candidates.length === 1
+                  ? "1 verified issue ready to work on:"
+                  : `Showing ${candidates.length} verified issue${candidates.length === 1 ? "" : "s"} ranked by readiness:`}
+              </p>
+              {tagsInput.trim() && (
+                <span className="badge accent" style={{ fontSize: "0.75rem" }}>
+                  Filtered by tags: {tagsInput}
+                </span>
+              )}
+            </div>
+
             {candidates.map((cand, idx) => (
               <CandidateCard
                 key={`${cand.repo}#${cand.number}`}

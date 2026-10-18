@@ -244,7 +244,7 @@ export default function GuidePage() {
             <h3>Couldn&apos;t build the guide</h3>
             <p>{error}</p>
             <Link href="/verify" className="btn btn-ghost" style={{ marginTop: 12 }}>
-              Verify a link instead
+              Find by Link instead
             </Link>
           </div>
         )}

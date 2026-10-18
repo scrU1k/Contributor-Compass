@@ -134,19 +134,68 @@ export function SiteHeader() {
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "4px",
+              gap: "6px",
               textDecoration: "none",
               fontSize: "0.85rem",
               fontWeight: 550,
             }}
             title="View search history"
           >
-            <span style={{ fontSize: "0.85rem" }}>🕒</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
             <span>History</span>
           </Link>
 
           <Link href="/">Find issues</Link>
-          <Link href="/verify">Verify a link</Link>
+
+          {/* Prominent Find by Link button */}
+          <Link
+            href="/verify"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "1px solid var(--accent)",
+              color: "var(--accent)",
+              background: "rgba(59, 130, 246, 0.08)",
+              fontWeight: 600,
+              fontSize: "0.84rem",
+              textDecoration: "none",
+              transition: "all 0.15s ease",
+            }}
+            title="Direct link verification across any GitHub issues, repos, or organizations"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            <span>Find by Link</span>
+          </Link>
+
           <Link href="/settings">Keys</Link>
 
           {historyCount > 0 && (

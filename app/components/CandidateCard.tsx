@@ -135,6 +135,24 @@ export function CandidateCard({
           {hasNewContributorGuide && (
             <span className="badge guide-badge">📖 New contributor guide</span>
           )}
+          {candidate.matchedTags && candidate.matchedTags.length > 0 && (
+            <span
+              className="badge accent"
+              style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem" }}
+              title={`Matches custom search tags: ${candidate.matchedTags.join(", ")}`}
+            >
+              🏷️ {candidate.matchedTags.join(", ")}
+            </span>
+          )}
+          {candidate.jevDecision?.decisionSource === "fallback" && (
+            <span
+              className="badge neutral"
+              style={{ fontSize: "0.68rem", opacity: 0.85 }}
+              title="Gemma semantic check offline/fallback; verified via deterministic structural gates"
+            >
+              Structural Check
+            </span>
+          )}
           {!newcomer && !isTopThree && (
             <span className="badge neutral">{candidate.score.total.toFixed(0)}/100</span>
           )}

@@ -226,7 +226,7 @@ export default function ResultsPage() {
                 Try again
               </button>
               <Link href="/verify" className="btn btn-ghost">
-                Verify a link instead
+                Find by Link instead
               </Link>
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function ResultsPage() {
                 Adjust preferences
               </Link>
               <Link href="/verify" className="btn btn-ghost">
-                Verify a link
+                Find by Link
               </Link>
             </div>
           </div>

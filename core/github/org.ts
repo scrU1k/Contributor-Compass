@@ -6,7 +6,7 @@ import { toCandidate } from "@/core/candidate";
 import { rankCandidates } from "@/core/rank/rank";
 import { evaluateIssueWithJev } from "@/core/verify/jev";
 import { llmConfigured } from "@/core/llm/adapter";
-import { isPromising, fitsHardConstraints } from "./filters";
+import { isPromising, hasNotReadyLabels, fitsHardConstraints } from "./filters";
 import type { IssueCandidate, Profile, RankedCandidate } from "@/core/types";
 
 export interface GhOwnerInfo {
@@ -95,17 +95,29 @@ export async function getOwnerRepos(
 }
 
 /**
+ * Normalizes language strings to distinguish C, C++, and C# reliably.
+ */
+function normalizeLanguage(lang: string | null | undefined): string {
+  if (!lang) return "";
+  const l = lang.toLowerCase().trim();
+  if (l === "c++" || l === "cpp") return "cpp";
+  if (l === "c#" || l === "csharp" || l === "cs") return "csharp";
+  if (l === "c") return "c";
+  return l.replace(/[^a-z0-9]/g, "");
+}
+
+/**
  * Ranks an organization's repositories according to the user's stack and general health signals.
  */
 function rankOrgRepos(repos: GhOrgRepoItem[], profile: Profile): GhOrgRepoItem[] {
   const userLanguages = new Set(
-    profile.stack.map((s) => s.tech.toLowerCase().replace(/[^a-z0-9+#]/g, "")),
+    profile.stack.map((s) => normalizeLanguage(s.tech)),
   );
 
   return [...repos].sort((a, b) => {
     // 1. Language preference match
-    const langA = (a.language ?? "").toLowerCase().replace(/[^a-z0-9+#]/g, "");
-    const langB = (b.language ?? "").toLowerCase().replace(/[^a-z0-9+#]/g, "");
+    const langA = normalizeLanguage(a.language);
+    const langB = normalizeLanguage(b.language);
     const matchA = userLanguages.has(langA) ? 1 : 0;
     const matchB = userLanguages.has(langB) ? 1 : 0;
     if (matchA !== matchB) return matchB - matchA;
@@ -168,8 +180,7 @@ export async function discoverOrgCandidates(
       ]);
 
       const candidates = issues
-        .filter(isPromising)
-        .slice(0, ISSUES_PER_REPO)
+        .filter((issue) => isPromising(issue) && !hasNotReadyLabels(issue))
         .map((issue) =>
           toCandidate(
             issue,
@@ -178,7 +189,8 @@ export async function discoverOrgCandidates(
             pullsResult ? linkedPRCount(pullsResult, issue.number) : null,
           ),
         )
-        .filter((c) => c.state === "open" && fitsHardConstraints(c, profile));
+        .filter((c) => c.state === "open" && fitsHardConstraints(c, profile))
+        .slice(0, ISSUES_PER_REPO);
 
       candidatePool.push(...candidates);
     } catch {
@@ -239,7 +251,7 @@ export async function discoverRepoCandidates(
   ]);
 
   const candidates = issues
-    .filter(isPromising)
+    .filter((issue) => isPromising(issue) && !hasNotReadyLabels(issue))
     .map((issue) =>
       toCandidate(
         issue,

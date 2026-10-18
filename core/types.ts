@@ -105,6 +105,7 @@ export interface IssueCandidate {
   fit?: number;
   score?: ReadinessScore;
   jevDecision?: JevDecision;
+  matchedTags?: string[];
 }
 
 export type ScoreKey =

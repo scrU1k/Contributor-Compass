@@ -185,13 +185,15 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
   const hasDevcontainer = lower.some((p) => p.startsWith(".devcontainer"));
   const hasCodeOfConduct = paths.some((p) => /code[-_ ]?of[-_ ]?conduct/i.test(p));
 
-  // New contributor guide detection
+  // Dedicated newcomer / getting-started contributor guide
   const hasNewContributorGuide = paths.some(
     (p) =>
-      /contributing/i.test(p) ||
       /new[-_ ]?contributor/i.test(p) ||
       /first[-_ ]?contribution/i.test(p) ||
       /getting[-_ ]?started/i.test(p) ||
+      /onboarding/i.test(p) ||
+      /good[-_ ]?first/i.test(p) ||
+      /quickstart/i.test(p) ||
       /developers?[-_ ]?guide/i.test(p),
   );
 

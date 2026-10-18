@@ -109,13 +109,13 @@ Contributor Compass provides a clean, responsive, and developer-first web interf
 [ Hero Landing Page (/) ] ──► [ Interactive Questionnaire ] ──► [ Verified Results & Graph (/results) ]
          │                                                                   │
          ├─► [ ★ Saved Issues Modal / Hover Tooltip ]                         ├─► [ Interactive Static Node Graph ]
-         │                                                                   ├─► [ Attuned Issue Guide (/guide) ]
-         └─► [ 🕒 History Page (/history) ]                                         └─► [ 💬 Ask Gemma Assistant ]
+         ├─► [ 🔗 Find by Link (Multi-URL + Tags) ]                          ├─► [ Attuned Issue Guide (/guide) ]
+         └─► [ History Page (/history) ]                                     └─► [ 💬 Ask Gemma Assistant ]
              (Snapshots & Stale Notices)
 ```
 
 1. **Dedicated Search History (`/history`):**
-   - Accessible via the **"🕒 History"** button in the top navigation bar (between the theme toggle and "Find issues").
+   - Accessible via the **History** button (crisp SVG clock icon) in the top navigation bar (between the theme toggle and "Find issues").
    - Records past discovery runs into structured snapshots with query profiles, timestamps, and candidate counts.
    - **Click-to-Expand Cards:** Inspect all verified issues captured during past runs without re-executing GitHub queries.
    - **Restore Search:** One click restores any prior search directly back into the live `/results` view.
@@ -126,18 +126,24 @@ Contributor Compass provides a clean, responsive, and developer-first web interf
    - **Smart Tooltip:** When no issues are saved, hovering or clicking displays an informative tooltip guiding newcomers on how to bookmark issues.
    - **Instant Backdrop Modal:** When issues are saved, a badge counter lights up. Clicking opens a modal listing all bookmarked issues with direct actions to **"Get the guide ➔"**, inspect on **GitHub**, or remove bookmarks.
 
-3. **Interactive Static Node Graph (`/results`):**
+3. **Find by Link — Multi-Target & Custom Tags (`/verify`):**
+   - Prominently styled in the top navigation and hero section for direct side-door exploration.
+   - **Multi-Link Verification:** Users can dynamically click **`+ Add another link`** to input multiple repositories, issues, or organizations simultaneously. All links are evaluated concurrently with unified filters (`isPromising`, `hasNotReadyLabels`, `fitsHardConstraints`).
+   - **Custom Tags & Focus Areas:** Enter custom comma-separated tags or click quick suggestions (e.g. `good first issue`, `documentation`, `python`, `bug`) to focus and prioritize issues matching specific labels, languages, or keywords.
+   - **Unified Filtering & Resilient Degradation:** Applies identical quality gates across single repos, whole organizations, or specific issue numbers.
+
+4. **Interactive Static Node Graph (`/results`):**
    - Visualizes the topology of verified issues, parent repositories, and technology tags.
    - Designed with static equilibrium to prevent distracting layout shifts, featuring click-to-pin inspection popovers with issue health indicators, readiness scores, and maintainer activity.
 
-4. **Attuned Issue Guides & "Ask Gemma" Inline Copilot (`/guide`):**
+5. **Attuned Issue Guides & "Ask Gemma" Inline Copilot (`/guide`):**
    - Each guide provides bespoke setup instructions, verified file citations, and contribution approaches.
-   - stuck on setup? Click **"💬 Ask Gemma"** directly beside the issue title to open an interactive Q&A assistant grounded in the issue's real repository context.
+   - Stuck on setup? Click **"💬 Ask Gemma"** directly beside the issue title to open an interactive Q&A assistant grounded in the issue's real repository context.
 
-5. **Pure SVG Dark / Light Mode Toggle:**
+6. **Pure SVG Dark / Light Mode Toggle:**
    - Seamless instantaneous theme switching with pure inline SVG icons, persisting across sessions.
 
-6. **Personal Contribution Tracker:**
+7. **Personal Contribution Tracker:**
    - Mark issues as "Done / Fixed", "PR Opened", or "Merged", tracking your open-source journey in real time with an automated header badge counter.
 
 ## 🔬 How Real Signals Are Verified (No Hallucinations)
