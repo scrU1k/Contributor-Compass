@@ -67,6 +67,7 @@ export interface RepoSignals {
   license: string | null;
   hasReadmeSetup: boolean;
   hasContributing: boolean;
+  hasNewContributorGuide: boolean;
   hasCI: boolean;
   hasTests: boolean;
   hasDevcontainer: boolean;

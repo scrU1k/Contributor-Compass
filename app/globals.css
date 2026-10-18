@@ -416,6 +416,28 @@ h1 {
   color: var(--muted);
 }
 
+.badge.top-badge {
+  background: rgba(255, 215, 0, 0.2);
+  color: #ffb300;
+}
+
+.badge.guide-badge {
+  background: rgba(111, 157, 237, 0.18);
+  color: var(--accent);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.card.top-pick {
+  border-color: rgba(255, 215, 0, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.15);
+}
+
 .evidence {
   list-style: none;
   padding: 0;

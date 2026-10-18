@@ -19,6 +19,36 @@ export interface GhPullRef {
   body: string | null;
 }
 
+/** Labels that indicate an issue is NOT ready for a newcomer to pick up. */
+const NOT_READY_LABELS = new Set([
+  "needs triage",
+  "needs discussion",
+  "needs design",
+  "needs author",
+  "needs decision",
+  "needs review",
+  "needs feedback",
+  "needs info",
+  "needs clarification",
+  "needs work",
+  "needs update",
+  "blocked",
+  "on hold",
+  "waiting for",
+  "wip",
+  "work in progress",
+  "do not merge",
+  "don't merge",
+  "draft",
+  "stale",
+  "archived",
+  "wontfix",
+  "wont-fix",
+  "invalid",
+  "duplicate",
+  "question",
+]);
+
 export async function getRepoIssues(fullName: string): Promise<GhIssue[]> {
   return cached(`issues:v3:${fullName}`, TTL_MS, async () => {
     const items = await gh<GhIssue[]>(
@@ -31,7 +61,12 @@ export async function getRepoIssues(fullName: string): Promise<GhIssue[]> {
       (item) =>
         !item.pull_request &&
         !item.assignee &&
-        (item.assignees?.length ?? 0) === 0,
+        (item.assignees?.length ?? 0) === 0 &&
+        // Filter out issues with "not ready" labels
+        !item.labels.some((l) => {
+          const label = typeof l === "string" ? l.toLowerCase() : (l.name ?? "").toLowerCase();
+          return NOT_READY_LABELS.has(label);
+        }),
     );
   });
 }

@@ -142,18 +142,19 @@ export default function ResultsPage() {
 
         {!error && results !== null && results.length > 0 && newcomer && (
           <>
-            <CandidateCard candidate={results[0]} tier="newcomer" featured onSelect={open} />
+            <CandidateCard candidate={results[0]} tier="newcomer" featured rank={1} onSelect={open} />
             {results.length > 1 && (
               <>
                 <p className="subtle" style={{ margin: "1.75rem 0 0.85rem" }}>
                   If that one doesn&apos;t fit, these are also verified:
                 </p>
                 <div className="cards">
-                  {results.slice(1, 3).map((candidate) => (
+                  {results.slice(1, 3).map((candidate, idx) => (
                     <CandidateCard
                       key={`${candidate.repo}#${candidate.number}`}
                       candidate={candidate}
                       tier="newcomer"
+                      rank={idx + 2}
                       onSelect={open}
                     />
                   ))}

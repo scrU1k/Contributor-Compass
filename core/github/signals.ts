@@ -151,6 +151,16 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
   const hasDevcontainer = lower.some((p) => p.startsWith(".devcontainer"));
   const hasCodeOfConduct = paths.some((p) => /code[-_ ]?of[-_ ]?conduct/i.test(p));
 
+  // New contributor guide detection
+  const hasNewContributorGuide = paths.some(
+    (p) =>
+      /contributing/i.test(p) ||
+      /new[-_ ]?contributor/i.test(p) ||
+      /first[-_ ]?contribution/i.test(p) ||
+      /getting[-_ ]?started/i.test(p) ||
+      /developers?[-_ ]?guide/i.test(p),
+  );
+
   const license =
     repo.license?.spdx_id && repo.license.spdx_id !== "NOASSERTION"
       ? repo.license.spdx_id
@@ -201,6 +211,13 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
       source: `https://github.com/${fullName}`,
     },
     {
+      id: "new-contributor-guide",
+      label: "New contributor guide",
+      value: hasNewContributorGuide ? "yes" : "no",
+      weight: 0.15,
+      source: `https://github.com/${fullName}`,
+    },
+    {
       id: "outsider-merges",
       label: "Merges from outside contributors (90d)",
       value: String(outsiders),
@@ -221,6 +238,7 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
     license,
     hasReadmeSetup: readmeSetup,
     hasContributing,
+    hasNewContributorGuide,
     hasCI,
     hasTests,
     hasDevcontainer,
