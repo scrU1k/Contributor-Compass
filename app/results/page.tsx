@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Profile, RankedCandidate } from "@/core/types";
 import { CandidateCard } from "../components/CandidateCard";
+import { ResultsNodeGraph } from "../components/ResultsNodeGraph";
 import { SiteHeader } from "../components/SiteHeader";
 import { SkeletonList } from "../components/Skeleton";
 import { settingsHeaders } from "../lib/settings";
@@ -34,7 +35,13 @@ export default function ResultsPage() {
       return;
     }
 
-    const parsed = JSON.parse(raw) as Profile;
+    let parsed: Profile;
+    try {
+      parsed = JSON.parse(raw) as Profile;
+    } catch {
+      router.replace("/");
+      return;
+    }
     setProfile(parsed);
 
     let cancelled = false;
@@ -140,45 +147,61 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {!error && results !== null && results.length > 0 && newcomer && (
+        {!error && results !== null && results.length > 0 && (
           <>
-            <CandidateCard candidate={results[0]} tier="newcomer" featured rank={1} onSelect={open} />
-            {results.length > 1 && (
+            <ResultsNodeGraph
+              profile={profile}
+              candidates={results}
+              onSelectCandidate={open}
+            />
+
+            {newcomer ? (
               <>
-                <p className="subtle" style={{ margin: "1.75rem 0 0.85rem" }}>
-                  If that one doesn&apos;t fit, these are also verified:
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1rem" }}>
+                  <h3 style={{ fontSize: "1.15rem", margin: 0, fontWeight: 650 }}>
+                    Recommended Starting Issue
+                  </h3>
+                  <span className="subtle" style={{ fontSize: "0.85rem" }}>
+                    Verified doable & unassigned
+                  </span>
+                </div>
+                <CandidateCard candidate={results[0]} tier="newcomer" featured rank={1} onSelect={open} />
+                {results.length > 1 && (
+                  <>
+                    <p className="subtle" style={{ margin: "1.75rem 0 0.85rem" }}>
+                      If that one doesn&apos;t fit, these are also verified:
+                    </p>
+                    <div className="cards">
+                      {results.slice(1, 3).map((candidate, idx) => (
+                        <CandidateCard
+                          key={`${candidate.repo}#${candidate.number}`}
+                          candidate={candidate}
+                          tier="newcomer"
+                          rank={idx + 2}
+                          onSelect={open}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="subtle" style={{ marginBottom: 16 }}>
+                  {results.length} verified issue{results.length === 1 ? "" : "s"}, ranked by readiness.
                 </p>
                 <div className="cards">
-                  {results.slice(1, 3).map((candidate, idx) => (
+                  {results.map((candidate) => (
                     <CandidateCard
                       key={`${candidate.repo}#${candidate.number}`}
                       candidate={candidate}
-                      tier="newcomer"
-                      rank={idx + 2}
+                      tier="experienced"
                       onSelect={open}
                     />
                   ))}
                 </div>
               </>
             )}
-          </>
-        )}
-
-        {!error && results !== null && results.length > 0 && !newcomer && (
-          <>
-            <p className="subtle" style={{ marginBottom: 16 }}>
-              {results.length} verified issue{results.length === 1 ? "" : "s"}, ranked by readiness.
-            </p>
-            <div className="cards">
-              {results.map((candidate) => (
-                <CandidateCard
-                  key={`${candidate.repo}#${candidate.number}`}
-                  candidate={candidate}
-                  tier="experienced"
-                  onSelect={open}
-                />
-              ))}
-            </div>
           </>
         )}
 

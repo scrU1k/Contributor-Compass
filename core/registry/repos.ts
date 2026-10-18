@@ -46,7 +46,7 @@ export const REGISTRY: RegistryRepo[] = [
   // JavaScript / TypeScript / web
   repo("nodejs/node", "JavaScript", ["runtime", "backend"], "The Node.js runtime."),
   repo("vercel/next.js", "TypeScript", ["web", "frontend", "react"], "React framework."),
-  repo("facebook/react", "JavaScript", ["frontend", "ui"], "The React UI library."),
+  repo("expressjs/express", "JavaScript", ["web", "backend", "api"], "Fast, unopinionated, minimalist web framework for Node.js."),
   repo("sveltejs/svelte", "JavaScript", ["frontend", "ui"], "Compiler-first UI framework."),
   repo("vitejs/vite", "TypeScript", ["devtools", "build", "frontend"], "Frontend build tool."),
   repo("withastro/astro", "TypeScript", ["web", "frontend"], "Content-focused web framework."),
@@ -65,7 +65,7 @@ export const REGISTRY: RegistryRepo[] = [
   repo("rust-lang/book", "Markdown", ["docs", "education", "rust"], "The Rust Book; docs contributions."),
 
   // Go
-  repo("golang/go", "Go", ["language", "compiler"], "The Go programming language."),
+  repo("charmbracelet/bubbletea", "Go", ["cli", "tui", "devtools"], "Terminal UI framework with an approachable codebase and active review culture."),
   repo("gin-gonic/gin", "Go", ["web", "api", "backend"], "HTTP web framework."),
   repo("spf13/cobra", "Go", ["cli", "devtools"], "CLI library."),
   repo("cli/cli", "Go", ["cli", "devtools"], "GitHub's official CLI."),

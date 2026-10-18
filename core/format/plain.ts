@@ -72,7 +72,7 @@ export type Verdict = { label: string; tone: "good" | "warn" | "bad" };
 
 export function verdict(candidate: RankedCandidate): Verdict {
   const jev = candidate.score.jevDecision ?? candidate.jevDecision;
-  if (jev) {
+  if (jev && jev.decisionSource !== "fallback") {
     if (jev.verdict === "MISLABELED_TRAP") {
       return { label: `⚠️ Trap: ${jev.calibratedScope.replace(/_/g, " ")}`, tone: "bad" };
     }
@@ -103,7 +103,7 @@ export function plainEvidence(candidate: RankedCandidate): string[] {
   const out: string[] = [];
 
   const jev = candidate.score.jevDecision ?? candidate.jevDecision;
-  if (jev) {
+  if (jev && jev.decisionSource !== "fallback") {
     if (jev.verdict === "MISLABELED_TRAP") {
       out.push(`⚠️ Gemma-Jev: ${jev.evidence}`);
     } else if (jev.verdict === "VERIFIED_READY") {
@@ -114,17 +114,26 @@ export function plainEvidence(candidate: RankedCandidate): string[] {
     }
   }
 
+  // Priority 1: Assignment and Competition (most critical to avoid duplicate work)
+  if (!candidate.assigned) out.push("Nobody is assigned yet");
+  else out.push("Already assigned to someone");
+
+  if (candidate.linkedOpenPRs === 0) out.push("No linked open PR found");
+  else if (candidate.linkedOpenPRs === null) out.push("Competing PR status could not be checked");
+  else out.push(`${candidate.linkedOpenPRs} open PR(s) already exist`);
+
+  // Priority 2: Setup & Documentation
   if (s.hasReadmeSetup) out.push("Setup is documented");
   if (s.hasContributing) out.push("Has a contribution guide");
   if (s.hasTests) out.push("Has tests");
+
+  // Priority 3: Community activity
   if (s.mergedPRsFromOutsiders90d > 0) {
     out.push(`${s.outsiderMergeSampled ? "At least " : ""}${s.mergedPRsFromOutsiders90d} outside PR${s.mergedPRsFromOutsiders90d === 1 ? "" : "s"} merged recently`);
   } else if (!s.outsiderMergeStatusKnown) {
     out.push("Outside merge history could not be checked");
   }
-  if (!candidate.assigned) out.push("Nobody is assigned yet");
-  if (candidate.linkedOpenPRs === 0) out.push("No linked open PR found");
-  else if (candidate.linkedOpenPRs === null) out.push("Competing PR status could not be checked");
+
   if (s.license) out.push(`${s.license} licensed`);
 
   const effort = effortFromLabels(candidate.labels);

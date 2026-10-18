@@ -126,6 +126,7 @@ export interface JevDecision {
   evidence: string;              // Grounded 1-sentence explanation
   quote?: string | null;         // Verbatim substring extracted from issue body (if verified)
   quoteVerified?: boolean;       // True if quote exists verbatim in candidate.body
+  decisionSource?: "gemma" | "fallback";
 }
 
 export interface ReadinessScore {

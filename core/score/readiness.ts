@@ -103,7 +103,7 @@ export function scoreCandidate(
   };
   const selectedTypes = profile.contributionTypes.filter((type) => type !== "code");
   const typeHits = selectedTypes.filter((type) => typeSignals[type]?.test(issueText)).length;
-  const issueTypeFit = selectedTypes.length ? (typeHits ? 1 : 0.5) : 0.5;
+  const issueTypeFit = selectedTypes.length ? (typeHits ? 1 : 0.5) : 1.0;
   const fit = r3(repoFit * 0.8 + issueTypeFit * 0.2);
   evidence.push({
     id: "fit",
@@ -161,7 +161,7 @@ export function scoreCandidate(
   const labelsScore = candidate.labels.length > 0 ? 1 : 0.4;
 
   // If a Gemma-Jev decision is available, semantic verification replaces dumb body length!
-  const jev = opts.jev ?? candidate.score?.jevDecision;
+  const jev = opts.jev ?? candidate.score?.jevDecision ?? candidate.jevDecision;
   const semanticScore = jev ? jev.labelAccuracyScore : clamp01(candidate.body.length / 600);
 
   // A large-effort issue is not a first PR, however well written it is. The

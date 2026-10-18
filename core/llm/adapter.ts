@@ -27,48 +27,60 @@ export class LlmError extends Error {
   }
 }
 
+import { cachedLlmCall } from "@/core/llm/cache";
+
 export function llmConfigured(): boolean {
+  if (isOffline()) return true;
   const model = env.llmModel();
-  return !isOffline() && Boolean(
+  return Boolean(
     env.llmBaseUrl() && env.llmApiKey() && model && /^gemma-4(?:-|$)/i.test(model),
   );
 }
 
 export async function chatText(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
-  const base = env.llmBaseUrl();
-  const key = env.llmApiKey();
-  const model = opts.model ?? env.llmModel();
-  if (!base || !key || !model) throw new LlmError("LLM is not configured");
+  const model = opts.model ?? env.llmModel() ?? "gemma-4-31b-it";
   if (!/^gemma-4(?:-|$)/i.test(model)) {
     throw new LlmError("This build supports Gemma 4 models only");
   }
 
-  const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: opts.temperature ?? 0.2,
-      max_tokens: opts.maxTokens ?? 900,
-    }),
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
-  });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new LlmError(`LLM ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+  const cacheKey = {
+    model,
+    messages,
+    temperature: opts.temperature ?? 0.2,
+    max_tokens: opts.maxTokens ?? 900,
   };
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new LlmError("LLM returned no content");
-  return content;
+
+  return cachedLlmCall(cacheKey, async () => {
+    if (isOffline()) {
+      throw new LlmError("Offline mode: LLM cache miss");
+    }
+
+    const base = env.llmBaseUrl();
+    const key = env.llmApiKey();
+    if (!base || !key) throw new LlmError("LLM is not configured");
+
+    const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify(cacheKey),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new LlmError(`LLM ${res.status}: ${detail.slice(0, 300)}`);
+    }
+
+    const json = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = json.choices?.[0]?.message?.content;
+    if (!content) throw new LlmError("LLM returned no content");
+    return content;
+  });
 }
 
 /** Pull the first JSON object/array out of a possibly chatty response. */

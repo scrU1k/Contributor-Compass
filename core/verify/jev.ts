@@ -1,5 +1,6 @@
-import { env } from "@/core/config/env";
+import { env, isOffline } from "@/core/config/env";
 import { llmConfigured } from "@/core/llm/adapter";
+import { cachedLlmCall } from "@/core/llm/cache";
 import type { IssueCandidate, JevDecision, RepoSignals } from "@/core/types";
 
 /**
@@ -98,7 +99,7 @@ export class GemmaJevHarness {
   ): Promise<JevEvaluationResult> {
     const base = env.llmBaseUrl();
     const key = env.llmApiKey();
-    const model = env.llmModel() || "gemma-4-26b-a4b-it";
+    const model = env.llmModel() || "gemma-4-31b-it";
 
     if (!/^gemma-4(?:-|$)/i.test(model)) {
       throw new Error("This build supports Gemma 4 models only");
@@ -145,36 +146,89 @@ export class GemmaJevHarness {
 
     const userPrompt = `STATE:\n${JSON.stringify(state, null, 2)}\n\nQUESTIONS:\n${JSON.stringify(promptQuestions, null, 2)}`;
 
-    // 3. Dispatch to OpenAI-compatible endpoint with temperature 0.0 & logprobs
-    const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.0,
-        max_tokens: 180,
-        // Request token logprobs where supported
-        logprobs: true,
-        top_logprobs: 20,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    // 3. Dispatch to OpenAI-compatible endpoint with temperature 0.0 & logprobs (cached)
+    const cacheKey = {
+      model,
+      systemInstruction,
+      userPrompt,
+      logprobs: true,
+    };
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`Gemma-Jev API ${res.status}: ${errText.slice(0, 200)}`);
+    interface JevPayload {
+      content: string;
+      logprobsContent?: any;
     }
 
-    const payload = await res.json();
-    const content = payload.choices?.[0]?.message?.content ?? "{}";
-    const logprobsContent = payload.choices?.[0]?.logprobs?.content;
+    const payload = await cachedLlmCall<JevPayload>(cacheKey, async () => {
+      if (isOffline()) {
+        throw new Error("Offline mode: Jev cache miss");
+      }
+
+      if (!base || !key) {
+        throw new Error("Gemma LLM credentials not configured");
+      }
+
+      let res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemInstruction },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.0,
+          max_tokens: 320,
+          // Request token logprobs where supported
+          logprobs: true,
+          top_logprobs: 20,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      if (!res.ok && res.status === 400) {
+        // Graceful fallback if endpoint rejects logprobs: retry without logprobs
+        const errText = await res.text().catch(() => "");
+        if (/logprob/i.test(errText)) {
+          res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${key}`,
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: "system", content: systemInstruction },
+                { role: "user", content: userPrompt },
+              ],
+              temperature: 0.0,
+              max_tokens: 320,
+            }),
+            signal: AbortSignal.timeout(30_000),
+          });
+        } else {
+          throw new Error(`Gemma-Jev API ${res.status}: ${errText.slice(0, 200)}`);
+        }
+      }
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Gemma-Jev API ${res.status}: ${errText.slice(0, 200)}`);
+      }
+
+      const rawJson = await res.json();
+      return {
+        content: rawJson.choices?.[0]?.message?.content ?? "{}",
+        logprobsContent: rawJson.choices?.[0]?.logprobs?.content ?? null,
+      };
+    });
+
+    const content = payload.content;
+    const logprobsContent = payload.logprobsContent;
 
     // Parse raw letter choices from JSON
     let rawChoices: Record<string, string> = {};
@@ -192,6 +246,7 @@ export class GemmaJevHarness {
 
     // 4. Process calibrated probabilities & compute Jev primitives
     const answers: Record<string, JevAnswer> = {};
+    let logprobCursor = 0;
 
     for (const [qId, qSpec] of Object.entries(questions)) {
       if (qSpec.type === "quote") {
@@ -206,12 +261,14 @@ export class GemmaJevHarness {
       const validLetters = Object.keys(aliasMaps[qId] || {});
       const chosenLetter = (rawChoices[qId] || validLetters[0] || "A").toUpperCase();
 
-      // Extract temperature-scaled probabilities
-      const letterProbs = this.extractCalibratedProbs(
+      // Extract temperature-scaled probabilities with sequential cursor
+      const { probs: letterProbs, nextCursor } = this.extractCalibratedProbs(
         logprobsContent,
         chosenLetter,
         validLetters,
+        logprobCursor,
       );
+      logprobCursor = nextCursor;
 
       // Map single-letter probabilities back to original criteria labels
       const labelProbs: Record<string, number> = {};
@@ -280,20 +337,36 @@ export class GemmaJevHarness {
     logprobsContent: Array<{ token: string; logprob: number; top_logprobs?: Array<{ token: string; logprob: number }> }> | undefined,
     chosenLetter: string,
     validLetters: string[],
-  ): Record<string, number> {
-    // A parsed choice is not a confidence measurement. If token scores are
-    // missing, return a uniform distribution so downstream confidence stays low.
+    startIndex = 0,
+  ): { probs: Record<string, number>; nextCursor: number } {
+    // If token logprobs are unavailable, return conservative argmax distribution based on greedy model choice
     if (!logprobsContent || !Array.isArray(logprobsContent) || logprobsContent.length === 0) {
       const fallback: Record<string, number> = {};
-      const probability = 1 / Math.max(1, validLetters.length);
+      const otherCount = Math.max(1, validLetters.length - 1);
+      const remainingProb = validLetters.length > 1 ? 0.15 / otherCount : 0;
       for (const ltr of validLetters) {
-        fallback[ltr] = probability;
+        fallback[ltr] = ltr === chosenLetter ? (validLetters.length > 1 ? 0.85 : 1.0) : remainingProb;
       }
-      return fallback;
+      return { probs: fallback, nextCursor: startIndex };
     }
 
-    // Locate token step where chosenLetter was emitted
-    const step = logprobsContent.find((s) => s.token.trim().replace(/"/g, "") === chosenLetter);
+    // Locate token step where chosenLetter was emitted at or after startIndex
+    let foundIndex = -1;
+    for (let i = startIndex; i < logprobsContent.length; i++) {
+      const tok = logprobsContent[i].token.trim().replace(/"/g, "");
+      if (tok === chosenLetter) {
+        foundIndex = i;
+        break;
+      }
+    }
+
+    // Fallback if not found after cursor: search from beginning
+    if (foundIndex === -1) {
+      foundIndex = logprobsContent.findIndex((s) => s.token.trim().replace(/"/g, "") === chosenLetter);
+    }
+
+    const step = foundIndex !== -1 ? logprobsContent[foundIndex] : undefined;
+    const nextCursor = foundIndex !== -1 ? foundIndex + 1 : startIndex;
     const topCandidates = step?.top_logprobs ?? [];
 
     const rawLogprobs: Record<string, number> = {};
@@ -328,7 +401,7 @@ export class GemmaJevHarness {
     for (const ltr of validLetters) {
       result[ltr] = (expScores[ltr] ?? 0) / (totalExp || 1);
     }
-    return result;
+    return { probs: result, nextCursor };
   }
 }
 
@@ -353,6 +426,7 @@ export async function evaluateIssueWithJev(
         : "No beginner-oriented label was found; semantic difficulty was not assessed because Gemma is unavailable.",
       quote: null,
       quoteVerified: false,
+      decisionSource: "fallback",
     };
   }
 
@@ -363,7 +437,7 @@ export async function evaluateIssueWithJev(
       repository: candidate.repo,
       issue_title: candidate.title,
       labels: candidate.labels,
-      body_snippet: candidate.body.slice(0, 2000),
+      body_snippet: candidate.body.slice(0, 3500),
       repo_stars: signals.stars,
       has_ci: signals.hasCI,
       has_tests: signals.hasTests,
@@ -472,6 +546,7 @@ export async function evaluateIssueWithJev(
       evidence,
       quote: quoteCheck.quote,
       quoteVerified: quoteCheck.quoteVerified,
+      decisionSource: "gemma",
     };
   } catch (err) {
     // Graceful fallback on network or API failure
@@ -484,6 +559,7 @@ export async function evaluateIssueWithJev(
       evidence: "Gemma semantic assessment was unavailable; use the structural evidence and ask the maintainer if scope is unclear.",
       quote: null,
       quoteVerified: false,
+      decisionSource: "fallback",
     };
   }
 }

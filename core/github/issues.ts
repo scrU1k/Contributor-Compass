@@ -1,6 +1,7 @@
 import { gh } from "./client";
 import { cached } from "@/core/cache/cache";
 import type { GhIssue } from "./search";
+import { isPromising } from "./filters";
 
 /**
  * Stage 2: targeted issue retrieval over GitHub's Core REST API.
@@ -11,7 +12,7 @@ import type { GhIssue } from "./search";
  * faster and far harder to rate-limit.
  */
 
-const TTL_MS = 2 * 60 * 1000;
+const TTL_MS = 20 * 60 * 1000;
 
 export interface GhPullRef {
   number: number;
@@ -19,59 +20,12 @@ export interface GhPullRef {
   body: string | null;
 }
 
-/** Labels that indicate an issue is NOT ready for a newcomer to pick up. */
-const NOT_READY_LABELS = new Set([
-  "needs triage",
-  "needs discussion",
-  "needs design",
-  "needs author",
-  "needs decision",
-  "needs review",
-  "needs feedback",
-  "needs info",
-  "needs clarification",
-  "needs work",
-  "needs update",
-  "blocked",
-  "on hold",
-  "waiting for",
-  "wip",
-  "work in progress",
-  "do not merge",
-  "don't merge",
-  "draft",
-  "stale",
-  "archived",
-  "wontfix",
-  "wont-fix",
-  "invalid",
-  "duplicate",
-  "question",
-]);
-
 export async function getRepoIssues(fullName: string): Promise<GhIssue[]> {
   return cached(`issues:v4:${fullName}`, TTL_MS, async () => {
-    const collected: GhIssue[] = [];
-    // Bounded pagination: more coverage than a single page without allowing a
-    // busy repository to consume an unbounded share of a request's quota.
-    for (let page = 1; page <= 3; page++) {
-      const items = await gh<GhIssue[]>(
-        `/repos/${fullName}/issues?state=open&sort=updated&direction=desc&per_page=100&page=${page}`,
-      );
-      collected.push(...items);
-      if (items.length < 100) break;
-    }
-    return collected.filter(
-      (item) =>
-        !item.pull_request &&
-        !item.assignee &&
-        (item.assignees?.length ?? 0) === 0 &&
-        // Filter out issues with "not ready" labels
-        !item.labels.some((l) => {
-          const label = typeof l === "string" ? l.toLowerCase() : (l.name ?? "").toLowerCase();
-          return NOT_READY_LABELS.has(label);
-        }),
+    const items = await gh<GhIssue[]>(
+      `/repos/${fullName}/issues?state=open&sort=updated&direction=desc&per_page=100`,
     );
+    return items.filter(isPromising);
   });
 }
 
@@ -85,13 +39,13 @@ export async function getRepoOpenPRs(fullName: string): Promise<{ pulls: GhPullR
   return cached(`openprs:v3:${fullName}`, TTL_MS, async () => {
     const collected: GhPullRef[] = [];
     let complete = true;
-    for (let page = 1; page <= 5; page++) {
+    for (let page = 1; page <= 2; page++) {
       const pulls = await gh<GhPullRef[]>(
         `/repos/${fullName}/pulls?state=open&per_page=100&page=${page}`,
       );
       collected.push(...pulls);
       if (pulls.length < 100) break;
-      if (page === 5) complete = false;
+      if (page === 2) complete = false;
     }
     return {
       pulls: collected.map((p) => ({ number: p.number, title: p.title ?? "", body: p.body ?? null })),
@@ -108,6 +62,9 @@ export function linkedPRCount(result: { pulls: GhPullRef[]; complete: boolean },
 /** How many open PRs explicitly reference this issue? (#123 in title or body) */
 export function countPRsReferencing(pulls: GhPullRef[], issueNumber: number): number {
   const escaped = String(issueNumber).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const reference = new RegExp(`(?:#${escaped}(?!\\d)|/issues/${escaped}(?!\\d)|\\bclose[sd]?\\s+#${escaped}(?!\\d))`, "i");
+  const reference = new RegExp(
+    `(?:(?:[\\w.-]+\\/[\\w.-]+)?#${escaped}(?!\\d)|/issues/${escaped}(?!\\d)|\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${escaped}(?!\\d)|\\bgh-${escaped}(?!\\d))`,
+    "i",
+  );
   return pulls.filter((p) => reference.test(`${p.title} ${p.body ?? ""}`)).length;
 }

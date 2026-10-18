@@ -24,7 +24,7 @@ export class CacheMissError extends Error {
 
 function cacheDir(): string {
   const dir = env.cacheDir();
-  return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+  return path.isAbsolute(dir) ? dir : path.join(/*turbopackIgnore: true*/ process.cwd(), dir);
 }
 
 function keyToFile(key: string): string {
@@ -50,14 +50,22 @@ export async function readCache<T>(
 export async function writeCache<T>(key: string, value: T, ttlMs: number): Promise<void> {
   const entry: Entry<T> = { expiresAt: Date.now() + ttlMs, value };
   const file = keyToFile(key);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(entry), "utf8");
+  const dir = path.dirname(file);
+  await fs.mkdir(dir, { recursive: true });
+  const tmpFile = path.join(
+    dir,
+    `${path.basename(file)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`,
+  );
+  await fs.writeFile(tmpFile, JSON.stringify(entry), "utf8");
+  await fs.rename(tmpFile, file);
 }
 
+const inFlight = new Map<string, Promise<unknown>>();
+
 /**
- * Read-through cache.
+ * Read-through cache with in-flight deduplication.
  *
- * - Online:  return a fresh hit, otherwise call `fn` and persist.
+ * - Online:  return a fresh hit, otherwise deduplicate and call `fn` and persist.
  * - Offline: return a hit regardless of expiry (a stale demo beats a blank
  *            screen), otherwise throw CacheMissError so the caller can degrade.
  */
@@ -71,9 +79,25 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
   const hit = await readCache<T>(key);
   if (hit !== undefined) return hit;
 
-  const value = await fn();
-  await writeCache(key, value, ttlMs);
-  return value;
+  const pending = inFlight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const promise = (async () => {
+    try {
+      const value = await fn();
+      await writeCache(key, value, ttlMs);
+      return value;
+    } catch (err) {
+      const fallback = await readCache<T>(key, { allowExpired: true });
+      if (fallback !== undefined) return fallback;
+      throw err;
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+
+  inFlight.set(key, promise);
+  return promise;
 }
 
 export async function cacheStats(): Promise<{ dir: string; files: number; bytes: number }> {

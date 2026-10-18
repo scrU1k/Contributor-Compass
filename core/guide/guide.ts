@@ -89,6 +89,16 @@ function sampleTree(paths: string[], limit = 250): string[] {
   return [...new Set([...interesting.slice(0, limit), ...paths.slice(0, 80)])].slice(0, limit);
 }
 
+/** Protocol check to prevent javascript: or data: URL injection from LLM citations. */
+export function isSafeHttpUrl(candidateUrl: string): boolean {
+  try {
+    const parsed = new URL(candidateUrl);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function buildGuidance(
   candidate: RankedCandidate,
   profile: Profile,
@@ -138,6 +148,9 @@ export async function buildGuidance(
     );
 
     const verified = await filterExistingPaths(candidate.repo, raw.whereToLook);
+    const safeResources = (raw.resources || []).filter(
+      (r) => typeof r?.url === "string" && isSafeHttpUrl(r.url),
+    );
 
     return {
       summary: raw.summary,
@@ -147,7 +160,7 @@ export async function buildGuidance(
       firstCommit: raw.firstCommit,
       resources: [
         { title: "The issue", url: candidate.url },
-        ...raw.resources.slice(0, 4),
+        ...safeResources.slice(0, 4),
       ],
     };
   } catch {

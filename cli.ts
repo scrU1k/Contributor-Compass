@@ -25,6 +25,7 @@ import { parseGitHubTarget } from "./core/github/url";
 import { discoverOrgCandidates, discoverRepoCandidates } from "./core/github/org";
 import { runMatch } from "./core/pipeline";
 import { buildGuidance } from "./core/guide/guide";
+import { verifySingleIssue } from "./core/verify/single";
 import { chatJSON, llmConfigured } from "./core/llm/adapter";
 import { minimalProfile } from "./core/profile/defaults";
 import { verdict, plainEvidence } from "./core/format/plain";
@@ -306,11 +307,8 @@ async function main() {
       candidates = repoResult.candidates;
     } else if (targetParsed?.kind === "issue") {
       console.log(`${C.cyan}🎯 Verifying single issue: ${C.bold}${targetParsed.repo} #${targetParsed.number}${C.reset}...`);
-      const repoResult = await discoverRepoCandidates(targetParsed.repo, profile);
-      candidates = repoResult.candidates.filter((c) => c.number === targetParsed.number);
-      if (candidates.length === 0 && repoResult.candidates.length > 0) {
-        candidates = [repoResult.candidates[0]];
-      }
+      const single = await verifySingleIssue(targetParsed.repo, targetParsed.number, profile);
+      candidates = [single];
     } else {
       console.log(`${C.cyan}🔍 Running global curated scout & hybrid issue matching...${C.reset}`);
       const match = await runMatch(profile, 6);

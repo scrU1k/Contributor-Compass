@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
-import { getIssue } from "@/core/github/search";
 import { parseGitHubTarget } from "@/core/github/url";
 import { discoverOrgCandidates, discoverRepoCandidates } from "@/core/github/org";
-import { getRepoSignals } from "@/core/github/signals";
-import { getRepoOpenPRs, linkedPRCount } from "@/core/github/issues";
-import { toCandidate } from "@/core/candidate";
 import { minimalProfile } from "@/core/profile/defaults";
-import { scoreCandidate } from "@/core/score/readiness";
-import { explainDeterministic } from "@/core/rank/rank";
-import { evaluateIssueWithJev } from "@/core/verify/jev";
+import { verifySingleIssue } from "@/core/verify/single";
 import { configFromRequest, withRequestConfig } from "@/core/config/requestConfig";
-import type { RankedCandidate, Tier } from "@/core/types";
+import type { Tier } from "@/core/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,32 +60,7 @@ export async function POST(request: Request) {
       }
 
       // 3. Single Issue target (e.g. "https://github.com/owner/repo/issues/123")
-      const [issue, signals, pullsResult] = await Promise.all([
-        getIssue(target.repo, target.number),
-        getRepoSignals(target.repo),
-        getRepoOpenPRs(target.repo).catch(() => null),
-      ]);
-      if (issue.state !== "open") {
-        return NextResponse.json({ error: "That issue is closed, so it is not available to start." }, { status: 409 });
-      }
-
-      const candidate = toCandidate(
-        issue,
-        target.repo,
-        signals,
-        pullsResult ? linkedPRCount(pullsResult, target.number) : null,
-      );
-
-      // Run Gemma 4 Jev decision harness
-      const jev = await evaluateIssueWithJev(candidate, signals).catch(() => undefined);
-
-      const scored: RankedCandidate = {
-        ...candidate,
-        score: scoreCandidate(candidate, profile, { ignoreFit: true, jev }),
-        why: "",
-        jevDecision: jev,
-      };
-      scored.why = jev?.evidence || explainDeterministic(scored, profile);
+      const scored = await verifySingleIssue(target.repo, target.number, profile);
 
       return NextResponse.json({
         mode: "issue",

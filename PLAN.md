@@ -1,4 +1,4 @@
-# Contributor Compass — Build Plan (v3.2)
+# Contributor Compass — Build Plan (v3.3)
 
 **Event:** Hacktoberfest Hack Day (BMSCE IEEE Computer Society)
 **Themes:** Use AI to Build Developer Tools · AI for Open Innovation
@@ -633,4 +633,63 @@ A user can paste only an API key and still run when the server has its model con
 **Honest limitation.** Keys transit this app's server (they must, to call Google and GitHub).
 They are held in memory for the duration of one request and never logged or persisted. For a
 production deployment the next step is an encrypted server-side session store.
+
+---
+
+## 19. Deep Audit Findings & 14-Step Remediation Plan
+
+A comprehensive system-wide audit across all modules (`core/`, endpoints, UI, scripts, CLI) established the following defect inventory and resolution roadmap:
+
+### Defect Inventory Summary
+
+- **P0-1 (Jev Token Attribution):** `extractCalibratedProbs` in `core/verify/jev.ts` used global `.find()` matching token choices across the entire output, causing cross-contamination of logits between questions, plus fatal collapse into fallback if `logprobs` is rejected by the endpoint.
+- **P0-2 (Verify No-Key Regression):** `/api/verify` unconditionally attached fallback `NEEDS_TRIAGE` Jev decisions, causing high-scoring verified issues to show misleading warn badges without a key.
+- **P0-3 (Discovery Quality Gate Divergence):** Registry, live-search, and `/verify` org paths applied inconsistent filters (`isPromising`, `NOT_READY_LABELS`, and `fitsHardConstraints`).
+- **P0-4 (NOT_READY False Matches):** Exact set equality missed common hyphen/colon label variants (`needs: triage`, `waiting for maintainer`), while hard-killing live `question` and `stale` issues.
+- **P0-5 (Cache Stampede & Quota Burn):** `cached()` had no in-flight deduplication; 40+ calls per match burned unauthenticated rate limits.
+- **P0-6 (No LLM Response Cache):** Completions were never cached, causing `COMPASS_OFFLINE=1` to silently disable all Gemma features.
+- **P1 Items:** Automated bot PRs counted as human merges, non-atomic cache writes, GitHub 403s swallowed as 404, unvalidated guide URLs, unguarded sessionStorage parse, and CLI single-issue substitution bug.
+
+### 14-Step Execution Roadmap
+
+1. **Jev Token-Step Attribution:** Sequential token cursor, argmax fallback on absent logprobs, and `decisionSource` tagging (`core/verify/jev.ts`).
+2. **Verify No-Key Decoupling:** Only attach Jev records when `llmConfigured()` is true (`app/api/verify/route.ts`).
+3. **Shared Filter Module:** Centralize `isPromising`, `isNotReadyLabel` (regex), and `fitsHardConstraints` in `core/github/filters.ts`.
+4. **In-Flight Deduplication & Quota Safety:** Add `Map<key, Promise>` in `core/cache/cache.ts`; raise TTL to 20m; skip unauthenticated search.
+5. **LLM Response Cache:** Create `core/llm/cache.ts` with 24h TTL; support offline mode hits.
+6. **Bot PR Filtering:** Exclude bots from outsider merge counts in `core/github/signals.ts`.
+7. **CLI Direct Fetch:** Fetch target issue directly via `getIssue` in `cli.ts`.
+8. **Guide URL Validation:** Enforce `http:` / `https:` protocol checks on recommended resources in `core/guide/guide.ts`.
+9. **Fit Scoring & Weights:** Set `issueTypeFit = 1.0` for code contributors; reconcile evidence weights to 1.0 (`core/score/readiness.ts`).
+10. **Curated Registry Cleanup:** Replace `golang/go` (Gerrit) and `facebook/react` with newcomer-friendly repositories (`core/registry/repos.ts`).
+11. **Maintainer Response Calculation:** Calculate actual turnaround time from closed PR sample timestamps (`core/github/signals.ts`).
+12. **Automated Unit Tests:** Add pure unit tests covering formulas, filters, target parser, and quote verification via Node test runner.
+13. **Prefetch v2:** Warm match scenarios, single issues, and orgs while caching Gemma responses (`scripts/prefetch.ts`).
+14. **Documentation & Environment Sweep:** Clean `.env.example`, sync weights, and verify model configurations.
+
+---
+
+## 20. Interactive Verification Topology & Discovery Latency Optimization (v3.3)
+
+### 1. Interactive Verification Topology / Node Graph
+- **Placement & Flow:** Mounted as the very first visual component at the top of `/results`, with individual candidate cards accessible upon scrolling below.
+- **Organic Physics:** Zero-dependency SVG visualization (`viewBox="0 0 960 420"`) featuring:
+  - Staggered spring expand-out entrance animation (`cubic-bezier(0.34, 1.56, 0.64, 1)`).
+  - Continuous multi-axis micro-drift floating physics (`nodeFloatA`, `nodeFloatB`, `nodeFloatC`) across root, repository, and issue nodes.
+  - Profile anchor node with dual radar pulse ripple rings symbolizing live repository scanning.
+- **Contextual Hover Popover Card:**
+  - Displays repository health indicators (CI presence, 90d outsider human merges, documentation status, candidate count).
+  - Shows readiness score (`/100`), effort size hint, unassigned status, and linked pull request competition count.
+  - Renders **Gemma Jev Grounded Quotes** (`quoteVerified`) highlighting verbatim requirements extracted from the issue body.
+  - Features direct "Get Step-by-Step Guide ➔" call-to-action button for instantaneous onboarding transitions.
+
+### 2. Discovery Latency Optimization (From Minutes to Sub-7s)
+- **Root Cause:** Deep unauthenticated GitHub API pagination (3 pages of issues + 5 pages of pulls across 5 scouted repos) causing 60–80 HTTP round-trips hitting unauthenticated rate-limits and 20s timeouts.
+- **Remediation Applied:**
+  - Bounded issue scouting to 1 page (100 items) and pull requests to 2 pages (up to 200 pulls).
+  - Tuned `REPOS_TO_SCOUT` to 3 and `LIVE_SEARCH_REPOS` to 2.
+  - Lowered client HTTP request timeout from 20s to 8s with fast-fail fallback.
+  - Implemented stale-while-error cache fallback in `core/cache/cache.ts` to immediately serve cached repository signals if network drop or 403 occurs.
+- **Outcome:** Full uncached match latency dropped from minutes down to **6.9s** cold uncached, and **sub-second** on cached scenarios.
+
 

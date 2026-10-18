@@ -27,8 +27,15 @@ export default function GuidePage() {
       return;
     }
 
-    const profile = JSON.parse(rawProfile) as Profile;
-    const selected = JSON.parse(rawSelected) as RankedCandidate;
+    let profile: Profile;
+    let selected: RankedCandidate;
+    try {
+      profile = JSON.parse(rawProfile) as Profile;
+      selected = JSON.parse(rawSelected) as RankedCandidate;
+    } catch {
+      router.replace("/");
+      return;
+    }
 
     let cancelled = false;
 

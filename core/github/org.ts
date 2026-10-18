@@ -6,6 +6,7 @@ import { toCandidate } from "@/core/candidate";
 import { rankCandidates } from "@/core/rank/rank";
 import { evaluateIssueWithJev } from "@/core/verify/jev";
 import { llmConfigured } from "@/core/llm/adapter";
+import { isPromising, fitsHardConstraints } from "./filters";
 import type { IssueCandidate, Profile, RankedCandidate } from "@/core/types";
 
 export interface GhOwnerInfo {
@@ -98,13 +99,13 @@ export async function getOwnerRepos(
  */
 function rankOrgRepos(repos: GhOrgRepoItem[], profile: Profile): GhOrgRepoItem[] {
   const userLanguages = new Set(
-    profile.stack.map((s) => s.tech.toLowerCase().replace(/[^a-z0-9]/g, "")),
+    profile.stack.map((s) => s.tech.toLowerCase().replace(/[^a-z0-9+#]/g, "")),
   );
 
   return [...repos].sort((a, b) => {
     // 1. Language preference match
-    const langA = (a.language ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const langB = (b.language ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const langA = (a.language ?? "").toLowerCase().replace(/[^a-z0-9+#]/g, "");
+    const langB = (b.language ?? "").toLowerCase().replace(/[^a-z0-9+#]/g, "");
     const matchA = userLanguages.has(langA) ? 1 : 0;
     const matchB = userLanguages.has(langB) ? 1 : 0;
     if (matchA !== matchB) return matchB - matchA;
@@ -167,6 +168,7 @@ export async function discoverOrgCandidates(
       ]);
 
       const candidates = issues
+        .filter(isPromising)
         .slice(0, ISSUES_PER_REPO)
         .map((issue) =>
           toCandidate(
@@ -176,7 +178,7 @@ export async function discoverOrgCandidates(
             pullsResult ? linkedPRCount(pullsResult, issue.number) : null,
           ),
         )
-        .filter((c) => c.state === "open");
+        .filter((c) => c.state === "open" && fitsHardConstraints(c, profile));
 
       candidatePool.push(...candidates);
     } catch {
@@ -237,6 +239,7 @@ export async function discoverRepoCandidates(
   ]);
 
   const candidates = issues
+    .filter(isPromising)
     .map((issue) =>
       toCandidate(
         issue,
@@ -245,7 +248,7 @@ export async function discoverRepoCandidates(
         pullsResult ? linkedPRCount(pullsResult, issue.number) : null,
       ),
     )
-    .filter((c) => c.state === "open");
+    .filter((c) => c.state === "open" && fitsHardConstraints(c, profile));
 
   if (llmConfigured() && candidates.length > 0) {
     const preliminary = await rankCandidates(candidates, profile, Math.min(3, candidates.length));

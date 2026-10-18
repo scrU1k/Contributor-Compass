@@ -37,6 +37,8 @@ const { runMatch } = await import("@/core/pipeline");
 const { buildGuidance } = await import("@/core/guide/guide");
 const { explainCandidate } = await import("@/core/explain/explain");
 const { cacheStats } = await import("@/core/cache/cache");
+const { verifySingleIssue } = await import("@/core/verify/single");
+const { discoverOrgCandidates } = await import("@/core/github/org");
 
 interface Scenario {
   name: string;
@@ -115,6 +117,11 @@ async function main(): Promise<void> {
 
       const top = results[0];
       if (top) {
+        console.log(`\n  -- warming single-issue verify [${top.repo}#${top.number}] --`);
+        await verifySingleIssue(top.repo, top.number, scenario.profile).catch((e) =>
+          console.warn("  verifySingleIssue warning:", e instanceof Error ? e.message : e),
+        );
+
         console.log("\n  -- why --");
         console.log(`  ${await explainCandidate(top, scenario.profile)}`);
         console.log("\n  -- guide --");
@@ -125,6 +132,17 @@ async function main(): Promise<void> {
       }
     } catch (err) {
       console.error(`  failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Warm an organization target for the verify demo
+  if (!only) {
+    console.log("\n=== warming organization: openstreetmap ===");
+    try {
+      const orgResult = await discoverOrgCandidates("openstreetmap", SCENARIOS[0].profile);
+      console.log(`  scanned ${orgResult.selectedRepos.length} repos, found ${orgResult.candidates.length} candidates`);
+    } catch (err) {
+      console.warn("  org prefetch warning:", err instanceof Error ? err.message : err);
     }
   }
 

@@ -1,14 +1,14 @@
 import { toCandidate } from "@/core/candidate";
 import { getRepoSignals } from "@/core/github/signals";
 import { getRepoIssues, getRepoOpenPRs, linkedPRCount } from "@/core/github/issues";
-import { labelNames, repoNamespaceFromUrl, searchIssues, type GhIssue } from "@/core/github/search";
+import { repoNamespaceFromUrl, searchIssues, type GhIssue } from "@/core/github/search";
+import { fitsHardConstraints, hasNotReadyLabels, isPromising } from "@/core/github/filters";
 import { scoutRepos, type ScoutResult } from "@/core/scout/scout";
-import { daysSince } from "@/core/score/readiness";
 import { rankCandidates } from "@/core/rank/rank";
 import { evaluateIssueWithJev } from "@/core/verify/jev";
 import { llmConfigured } from "@/core/llm/adapter";
+import { env } from "@/core/config/env";
 import type { IssueCandidate, Profile, RankedCandidate } from "@/core/types";
-import { effortFromLabels } from "@/core/format/effort";
 
 /**
  * The orchestrator.
@@ -27,43 +27,9 @@ export interface MatchResult {
   scout: ScoutResult;
 }
 
-const REPOS_TO_SCOUT = 5;
+const REPOS_TO_SCOUT = 3;
 const ISSUES_PER_REPO = 5;
-const STALE_DAYS = 240;
-const CROWDED_COMMENTS = 25;
-const LIVE_SEARCH_REPOS = 3;
-
-function fitsHardConstraints(candidate: IssueCandidate, profile: Profile): boolean {
-  const { constraints } = profile;
-  if (constraints.requireCI && !candidate.signals.hasCI) return false;
-  if (constraints.license?.length && (!candidate.signals.license ||
-      !constraints.license.some((license) => license.toLowerCase() === candidate.signals.license?.toLowerCase()))) return false;
-  if (constraints.maxRepoSize === "small" && candidate.signals.sizeKb > 100_000) return false;
-  if (constraints.maxRepoSize === "medium" && candidate.signals.sizeKb > 1_000_000) return false;
-  const size = candidate.sizeHint;
-  if (profile.issueSize === "tiny" && size !== "tiny") return false;
-  if (profile.issueSize === "small" && effortFromLabels(candidate.labels) === "large") return false;
-  if (profile.timeBudget === "under-1h" && ["medium", "large"].includes(effortFromLabels(candidate.labels))) return false;
-  return true;
-}
-
-/**
- * Cheap pre-filter before we spend verification calls on an issue.
- * Prefer an explicit beginner label, but accept a well-described issue —
- * plenty of good projects never label anything.
- */
-function isPromising(issue: GhIssue): boolean {
-  if (daysSince(issue.updated_at) > STALE_DAYS) return false;
-  if ((issue.comments ?? 0) > CROWDED_COMMENTS) return false;
-
-  const labels = labelNames(issue).map((l) => l.toLowerCase());
-  const beginner = labels.some((l) =>
-    /good first issue|help wanted|beginner|easy|starter|first[- ]timers/.test(l),
-  );
-  const described = (issue.body?.length ?? 0) > 160;
-
-  return beginner || described;
-}
+const LIVE_SEARCH_REPOS = 2;
 
 function liveDiscoveryQueries(profile: Profile): string[] {
   const language = profile.stack[0]?.tech.replace(/[^a-zA-Z0-9+#.-]/g, "");
@@ -76,6 +42,9 @@ function liveDiscoveryQueries(profile: Profile): string[] {
 }
 
 async function discoverOutsideRegistry(profile: Profile, knownRepos: Set<string>): Promise<IssueCandidate[]> {
+  // Unauthenticated GitHub search is rate-limited to 10 req/min; protect users without tokens
+  if (!env.githubToken()) return [];
+
   const hits: GhIssue[] = [];
   for (const query of liveDiscoveryQueries(profile)) {
     try {
@@ -88,7 +57,15 @@ async function discoverOutsideRegistry(profile: Profile, knownRepos: Set<string>
   const byRepo = new Map<string, GhIssue[]>();
   const seenIssues = new Set<string>();
   for (const issue of hits) {
-    if (issue.state !== "open" || issue.assignee || (issue.assignees?.length ?? 0) > 0 || !isPromising(issue)) continue;
+    if (
+      issue.state !== "open" ||
+      issue.assignee ||
+      (issue.assignees?.length ?? 0) > 0 ||
+      !isPromising(issue) ||
+      hasNotReadyLabels(issue)
+    ) {
+      continue;
+    }
     const repo = repoNamespaceFromUrl(issue.repository_url);
     if (!/^[A-Za-z0-9_-][\w.-]*\/[A-Za-z0-9_-][\w.-]*$/.test(repo) || knownRepos.has(repo.toLowerCase())) continue;
     const issueKey = `${repo.toLowerCase()}#${issue.number}`;
@@ -148,10 +125,13 @@ export async function runMatch(profile: Profile, limit = 10): Promise<MatchResul
   );
 
   const discovered = await discoverOutsideRegistry(profile, registryRepos);
+  // Only push repos that actually contributed at least one kept candidate
+  const discoveredReposWithHits = new Set(discovered.map((c) => c.repo.toLowerCase()));
   for (const candidate of discovered) {
-    if (!registryRepos.has(candidate.repo.toLowerCase())) {
+    const repoLower = candidate.repo.toLowerCase();
+    if (discoveredReposWithHits.has(repoLower) && !registryRepos.has(repoLower)) {
       scout.repos.push({ fullName: candidate.repo, why: "Found by live GitHub issue search" });
-      registryRepos.add(candidate.repo.toLowerCase());
+      registryRepos.add(repoLower);
     }
   }
   if (discovered.length) scout.source = "hybrid";

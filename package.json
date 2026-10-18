@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"core/**/*.test.ts\"",
     "prefetch": "tsx scripts/prefetch.ts",
     "evaluate": "tsx scripts/evaluate_jev.ts",
     "cli": "tsx cli.ts"

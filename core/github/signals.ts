@@ -35,6 +35,7 @@ interface GhPull {
   merged_at: string | null;
   author_association?: string;
   created_at: string;
+  user?: { login?: string; type?: string } | null;
 }
 
 const LANGUAGE_WEIGHT: Record<string, number> = {
@@ -101,18 +102,49 @@ export async function getRepoTreePaths(fullName: string): Promise<string[]> {
   });
 }
 
-async function countOutsiderMerges(owner: string, name: string): Promise<{ count: number; sampled: boolean; known: boolean }> {
+function isBotUser(user?: { login?: string; type?: string } | null): boolean {
+  if (!user) return false;
+  if (user.type === "Bot") return true;
+  const login = (user.login ?? "").toLowerCase();
+  return login.endsWith("[bot]") || /^(?:dependabot|renovate|snyk|greenkeeper|allcontributors)/i.test(login);
+}
+
+async function countOutsiderMerges(
+  owner: string,
+  name: string,
+): Promise<{ count: number; sampled: boolean; known: boolean; medianResponseHours: number | null }> {
   const pulls = await ghMaybe<GhPull[]>(
     `/repos/${owner}/${name}/pulls?state=closed&sort=updated&direction=desc&per_page=100`,
   );
-  if (!pulls) return { count: 0, sampled: false, known: false };
+  if (!pulls) return { count: 0, sampled: false, known: false, medianResponseHours: null };
   const cutoff = Date.now() - 90 * 86_400_000;
+  const durationsHours: number[] = [];
+
   const count = pulls.filter((p) => {
     if (!p.merged_at) return false;
-    if (new Date(p.merged_at).getTime() < cutoff) return false;
-    return !OUTSIDER_ASSOCIATIONS.has(p.author_association ?? "");
+    const mergedTime = new Date(p.merged_at).getTime();
+    if (mergedTime < cutoff) return false;
+    if (isBotUser(p.user)) return false;
+    if (OUTSIDER_ASSOCIATIONS.has(p.author_association ?? "")) return false;
+
+    const createdTime = new Date(p.created_at).getTime();
+    if (!isNaN(createdTime) && !isNaN(mergedTime) && mergedTime >= createdTime) {
+      durationsHours.push((mergedTime - createdTime) / 3_600_000);
+    }
+    return true;
   }).length;
-  return { count, sampled: pulls.length >= 100, known: true };
+
+  let medianResponseHours: number | null = null;
+  if (durationsHours.length > 0) {
+    durationsHours.sort((a, b) => a - b);
+    const mid = Math.floor(durationsHours.length / 2);
+    medianResponseHours =
+      durationsHours.length % 2 === 0
+        ? Math.round(((durationsHours[mid - 1] + durationsHours[mid]) / 2) * 10) / 10
+        : Math.round(durationsHours[mid] * 10) / 10;
+  }
+
+  return { count, sampled: pulls.length >= 100, known: true, medianResponseHours };
 }
 
 export async function getRepoSignals(fullName: string): Promise<RepoSignals> {
@@ -216,7 +248,7 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
       id: "new-contributor-guide",
       label: "New contributor guide",
       value: hasNewContributorGuide ? "yes" : "no",
-      weight: 0.15,
+      weight: 0,
       source: `https://github.com/${fullName}`,
     },
     {
@@ -250,7 +282,7 @@ async function fetchSignals(fullName: string): Promise<RepoSignals> {
     mergedPRsFromOutsiders90d: outsiders,
     outsiderMergeSampled: outsiderMerges.sampled,
     outsiderMergeStatusKnown: outsiderMerges.known,
-    medianMaintainerResponseHours: null,
+    medianMaintainerResponseHours: outsiderMerges.medianResponseHours,
     evidence,
   };
 }

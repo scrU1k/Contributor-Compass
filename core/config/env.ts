@@ -30,7 +30,8 @@ export const env = {
   llmBaseUrl: (): string | undefined => firstDefined(process.env.LLM_BASE_URL),
   llmApiKey: (): string | undefined =>
     firstDefined(requestConfig()?.llmApiKey, process.env.LLM_API_KEY),
-  llmModel: (): string | undefined => firstDefined(process.env.LLM_MODEL),
+  llmModel: (): string | undefined =>
+    firstDefined(requestConfig()?.llmModel, process.env.LLM_MODEL),
 
   cacheDir: (): string => process.env.COMPASS_CACHE_DIR?.trim() || ".cache",
 };

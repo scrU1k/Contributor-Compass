@@ -13,11 +13,13 @@
 export interface Settings {
   llmApiKey: string;
   githubToken: string;
+  llmModel?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   llmApiKey: "",
   githubToken: "",
+  llmModel: "",
 };
 
 const STORAGE_KEY = "compass.settings.v1";
@@ -50,6 +52,9 @@ export function headersFor(settings: Settings): Record<string, string> {
   if (settings.llmApiKey.trim()) headers["x-compass-llm-key"] = settings.llmApiKey.trim();
   if (settings.githubToken.trim()) {
     headers["x-compass-github-token"] = settings.githubToken.trim();
+  }
+  if (settings.llmModel?.trim()) {
+    headers["x-compass-llm-model"] = settings.llmModel.trim();
   }
   return headers;
 }

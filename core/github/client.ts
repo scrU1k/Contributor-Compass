@@ -1,7 +1,7 @@
 import { env } from "@/core/config/env";
 
 const API = "https://api.github.com";
-const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_TIMEOUT_MS = 8_000;
 
 export class GitHubError extends Error {
   constructor(
@@ -20,7 +20,16 @@ export class GitHubError extends Error {
  * Swap this module out for GH Archive or a code index at scale.
  */
 export async function gh<T>(pathname: string, init: RequestInit = {}): Promise<T> {
-  const url = pathname.startsWith("http") ? pathname : `${API}${pathname}`;
+  let url: string;
+  if (pathname.startsWith("http")) {
+    const parsed = new URL(pathname);
+    if (parsed.hostname.toLowerCase() !== "api.github.com") {
+      throw new Error(`Security restriction: gh() client can only query api.github.com, got ${parsed.hostname}`);
+    }
+    url = pathname;
+  } else {
+    url = `${API}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+  }
 
   const headers = new Headers(init.headers);
   headers.set("accept", "application/vnd.github+json");
@@ -60,12 +69,16 @@ export async function gh<T>(pathname: string, init: RequestInit = {}): Promise<T
   return (await res.json()) as T;
 }
 
-/** For optional probes where a 404/403 just means "not available". */
+/** For optional probes where a 404 just means "not available". */
 export async function ghMaybe<T>(pathname: string, init: RequestInit = {}): Promise<T | null> {
   try {
     return await gh<T>(pathname, init);
   } catch (err) {
-    if (err instanceof GitHubError && (err.status === 404 || err.status === 403)) return null;
+    if (err instanceof GitHubError) {
+      if (err.rateLimited || err.status === 429) throw err;
+      if (err.status === 404) return null;
+      if (err.status === 403 && !/rate limit/i.test(err.message)) return null;
+    }
     throw err;
   }
 }
