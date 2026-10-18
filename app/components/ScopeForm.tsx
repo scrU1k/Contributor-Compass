@@ -25,6 +25,7 @@ const INTERESTS: ChipOption<string>[] = [
   "Education",
   "Documentation",
   "Security",
+  "Not sure — open to anything",
 ].map((value) => ({ value, label: value }));
 
 const STACK: ChipOption<string>[] = [
@@ -88,6 +89,7 @@ export function ScopeForm() {
   const [experience, setExperience] = useState<ExperienceLevel>("newcomer");
   const [interests, setInterests] = useState<string[]>([]);
   const [stack, setStack] = useState<string[]>([]);
+  const [fears, setFears] = useState<string[]>([]);
   const [goal, setGoal] = useState<Goal>("learn");
   const [time, setTime] = useState<TimeBudget>("weekend");
   const [types, setTypes] = useState<ContributionType[]>(["code"]);
@@ -97,8 +99,8 @@ export function ScopeForm() {
   function submit(event: FormEvent) {
     event.preventDefault();
 
-    if (interests.length === 0 || stack.length === 0) {
-      setError("Pick at least one interest and one technology so we know what to look for.");
+    if (stack.length === 0) {
+      setError("Pick at least one technology so we know what to look for.");
       return;
     }
 
@@ -110,6 +112,7 @@ export function ScopeForm() {
       goal,
       stack: stack.map((tech) => ({ tech, fluency: tier === "newcomer" ? 2 : 4 })),
       interests,
+      fears: tier === "newcomer" ? fears : [],
       contributionTypes: types.length > 0 ? types : ["code"],
       timeBudget: time,
       constraints: {},
@@ -147,6 +150,24 @@ export function ScopeForm() {
           onToggle={(value) => setInterests((list) => toggle(list, value))}
         />
       </div>
+
+      {tier === "newcomer" && (
+        <div className="field">
+          <span className="field-label">What's the scariest part?</span>
+          <p className="field-hint">We'll pick issues that avoid your blockers.</p>
+          <ChipGroup
+            ariaLabel="Fears"
+            options={[
+              { value: "setup", label: "Getting the project running" },
+              { value: "codebase", label: "Understanding a new codebase" },
+              { value: "review", label: "The review / rejection process" },
+              { value: "not-sure", label: "Not sure — I'm just starting" },
+            ].map((v) => ({ value: v.value, label: v.label }))}
+            selected={fears}
+            onToggle={(value) => setFears((list) => toggle(list, value))}
+          />
+        </div>
+      )}
 
       <div className="field">
         <span className="field-label">What can you work in today?</span>

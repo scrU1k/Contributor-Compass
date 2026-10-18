@@ -26,6 +26,7 @@ export interface Profile {
   goal: Goal;
   stack: StackItem[];
   interests: string[];
+  fears: string[];
   contributionTypes: ContributionType[];
   timeBudget: TimeBudget;
   constraints: {

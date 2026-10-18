@@ -81,7 +81,6 @@ export function tagOverlap(profile: Profile, signals: RepoSignals): number {
 export function scoreCandidate(
   candidate: IssueCandidate,
   profile: Profile,
-  semanticFit?: number,
   opts: ScoreOptions = {},
 ): ReadinessScore {
   const s = candidate.signals;
@@ -90,15 +89,11 @@ export function scoreCandidate(
   const evidence: Evidence[] = [];
 
   // ── fit ────────────────────────────────────────────────────────────────────
-  const overlap = tagOverlap(profile, s);
-  const fit =
-    semanticFit == null ? overlap : clamp01(0.65 * semanticFit + 0.35 * overlap);
+  const fit = tagOverlap(profile, s);
   evidence.push({
     id: "fit",
     label: "Match with your stack & interests",
-    value: opts.ignoreFit
-      ? "not assessed (no profile)"
-      : `${Math.round(fit * 100)}%${semanticFit == null ? " (tags only)" : ""}`,
+    value: opts.ignoreFit ? "not assessed (no profile)" : `${Math.round(fit * 100)}% (tags only)`,
     weight: weights.fit,
     source: `https://github.com/${s.fullName}`,
   });

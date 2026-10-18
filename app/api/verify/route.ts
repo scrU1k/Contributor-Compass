@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       const profile = minimalProfile(tier);
       const scored: RankedCandidate = {
         ...candidate,
-        score: scoreCandidate(candidate, profile, undefined, { ignoreFit: true }),
+        score: scoreCandidate(candidate, profile, { ignoreFit: true }),
         why: "",
       };
       scored.why = explainDeterministic(scored, profile);

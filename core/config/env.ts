@@ -33,15 +33,6 @@ export const env = {
   llmModel: (): string | undefined =>
     firstDefined(requestConfig()?.llmModel, process.env.LLM_MODEL),
 
-  // Embeddings fall back to the chat endpoint if not set separately.
-  embedBaseUrl: (): string | undefined =>
-    firstDefined(
-      process.env.LLM_EMBED_BASE_URL,
-      requestConfig()?.llmBaseUrl,
-      process.env.LLM_BASE_URL,
-    ),
-  embedModel: (): string | undefined => firstDefined(process.env.LLM_EMBED_MODEL),
-
   cacheDir: (): string => process.env.COMPASS_CACHE_DIR?.trim() || ".cache",
 };
 

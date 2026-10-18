@@ -11,6 +11,7 @@ export function minimalProfile(tier: Tier): Profile {
     goal: tier === "newcomer" ? "learn" : "merge-fast",
     stack: [],
     interests: [],
+    fears: [],
     contributionTypes: ["code"],
     timeBudget: "weekend",
     constraints: {},

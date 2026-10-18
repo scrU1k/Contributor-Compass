@@ -1,6 +1,6 @@
 import type { IssueCandidate, Profile, RankedCandidate } from "@/core/types";
 import { scoreCandidate } from "@/core/score/readiness";
-import { cosine, embedTexts, toUnitCosine } from "@/core/embed/embed";
+import { tagOverlap } from "@/core/score/readiness";
 
 /**
  * Tier-weighted ranking.
@@ -30,27 +30,6 @@ export function repoText(candidate: IssueCandidate): string {
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-async function semanticFitByRepo(candidates: IssueCandidate[], profile: Profile): Promise<Map<string, number>> {
-  const result = new Map<string, number>();
-  const repos = [...new Set(candidates.map((c) => c.repo))];
-  if (repos.length === 0) return result;
-
-  const byRepo = new Map<string, IssueCandidate>();
-  for (const c of candidates) if (!byRepo.has(c.repo)) byRepo.set(c.repo, c);
-
-  const vectors = await embedTexts([
-    profileText(profile),
-    ...repos.map((r) => repoText(byRepo.get(r)!)),
-  ]);
-  if (!vectors) return result;
-
-  const [profileVector, ...repoVectors] = vectors;
-  repos.forEach((repo, i) => {
-    result.set(repo, toUnitCosine(cosine(profileVector, repoVectors[i])));
-  });
-  return result;
 }
 
 /** Deterministic "why this fits you" — used when the LLM is unavailable. */
@@ -83,10 +62,9 @@ export async function rankCandidates(
   profile: Profile,
   limit = 10,
 ): Promise<RankedCandidate[]> {
-  const semantic = await semanticFitByRepo(candidates, profile);
-
+  // No embeddings — fit is pure tag overlap
   const scored: RankedCandidate[] = candidates.map((candidate) => {
-    const score = scoreCandidate(candidate, profile, semantic.get(candidate.repo));
+    const score = scoreCandidate(candidate, profile);
     const ranked: RankedCandidate = {
       ...candidate,
       score,

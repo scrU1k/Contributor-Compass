@@ -16,6 +16,7 @@ export const profileSchema = z.object({
   goal: z.enum(["learn", "merge-fast", "maintainer-track", "portfolio"]),
   stack: z.array(stackItemSchema).max(20),
   interests: z.array(z.string()).max(20),
+  fears: z.array(z.string()).max(10).default([]),
   contributionTypes: z
     .array(z.enum(["code", "docs", "tests", "design", "translation", "triage"]))
     .max(6),

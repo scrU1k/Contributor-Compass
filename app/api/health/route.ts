@@ -2,7 +2,6 @@ import { GitHubError, gh } from "@/core/github/client";
 import { NextResponse } from "next/server";
 import { env, isOffline } from "@/core/config/env";
 import { llmConfigured } from "@/core/llm/adapter";
-import { embeddingsConfigured } from "@/core/embed/embed";
 import { cacheStats } from "@/core/cache/cache";
 import { configFromRequest, withRequestConfig } from "@/core/config/requestConfig";
 
@@ -44,7 +43,6 @@ export async function GET(request: Request) {
       github: Boolean(env.githubToken()),
       githubProbe,
       llm: llmConfigured(),
-      embeddings: embeddingsConfigured(),
       model: env.llmModel() ?? null,
       baseUrl: env.llmBaseUrl() ?? null,
       offline: isOffline(),

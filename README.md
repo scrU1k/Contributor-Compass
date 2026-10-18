@@ -36,7 +36,7 @@ npm run dev               # http://localhost:3000
 Open **`/settings`** and paste:
 
 - a **Gemma API key** from [Google AI Studio](https://aistudio.google.com/apikey)
-- a **GitHub token** (public read access is enough)
+- a **GitHub token** (public read access is enough) — *optional; without it you get 60 req/hr instead of 5,000*
 
 Keys are stored in your browser and sent only to this app's server for the duration of
 a request. Nothing is written to disk. Server-side `.env` values still work and act as
@@ -120,7 +120,6 @@ core/                 framework-agnostic; reusable by a future CLI
 ├─ scout/             Repo Scout: Gemma selection + deterministic fallback
 ├─ github/            client, Core REST issues, signals
 ├─ cache/             file-based cache with TTL
-├─ embed/             embeddings + cosine similarity
 ├─ score/             readiness scoring
 ├─ rank/              tier-weighted ranking
 ├─ verify/            evidence verification
@@ -150,6 +149,21 @@ Six sub-scores, each normalised to `[0,1]`, combined by tier weights into 0–10
 
 Every sub-score carries **evidence with provenance**. If a claim can't be traced
 back to something we fetched, it doesn't get shown.
+
+---
+
+## Newcomer-first UX
+
+The newcomer tier is designed for someone who has never opened a PR:
+
+- **Interests optional** — pick from the list or choose "Not sure — open to anything"
+- **"What's the scariest part?"** — an extra question that lets us avoid your blockers (setup, codebase, review, not sure)
+- **3 results + "Start here"** — one explicit pick with a plain-language verdict badge
+- **No jargon** — score cards show plain evidence ("unassigned, no competing PR, CONTRIBUTING.md present")
+
+The experienced tier swaps to a 4-field quick form, 10 ranked results, and full numeric breakdowns.
+
+**Demo beat:** flip the tier toggle → same candidate pool re-ranks. Large-effort issues drop for newcomers, rise for experienced.
 
 ---
 
