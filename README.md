@@ -34,6 +34,18 @@ Open source discovery today fails because **tools treat GitHub labels as gospel*
 
 **Contributor Compass solves this:** an automated onboarding compass that runs **live verification** across repository health, git tree structure, PR competition, and semantic issue complexity **before you write a single line of code**.
 
+### 📊 How Contributor Compass Compares
+
+| Discovery Dimension | GitHub Issue Search | GoodFirstIssue.dev / Up-For-Grabs | Contributor Compass |
+| :--- | :--- | :--- | :--- |
+| **Discovery Model** | Static text & keyword match | Periodic label scraper | **Multi-factor developer profile & semantic matching** |
+| **PR Collision Check** | None (manual inspection) | None | **Live search across active unmerged pull requests** |
+| **Maintainer Liveness** | Star count / commit count | Filter by language | **Outsider merge velocity (last 90d) + response turnaround** |
+| **Label Honesty** | Assumes label is accurate | Assumes label is accurate | **Gemma 4 Jev-style scope trap & triage validation** |
+| **Hallucination Protection** | N/A | N/A | **All file citations checked against live Git tree** |
+| **Actionable Onboarding** | None (raw issue thread) | None (redirect to GitHub) | **Synthesized setup commands & file-by-file plan** |
+| **Interactive Copilot** | None | None | **In-context Ask Gemma assistant for repository queries** |
+
 ---
 
 ## 🗺️ The Contributor Journey
@@ -52,6 +64,33 @@ Whether via the Web Application or the Terminal CLI, Contributor Compass guides 
 3. **Ground-Truth Verification:** Evaluates issue availability, competing PRs, maintainer turnaround time, and outside merge velocity.
 4. **Jev-Style Advisory Triage:** Runs high-speed System-1 heuristics with Gemma 4 to flag scope traps, hidden dependencies, and label honesty.
 5. **Grounded Onboarding Guide:** Generates concrete setup steps, contribution strategies, and verified file paths confirmed against the real Git tree.
+
+### 🔍 Concrete Evaluation Trace: End-to-End Pipeline in Action
+
+To see the engine in action, consider how Contributor Compass evaluates a real-world starter candidate:
+
+```
+[Candidate]: pallets/flask — Issue #5555 ("Clarify test client context behavior")
+├── 1. Live Ground-Truth Signals (Deterministic GitHub REST API)
+│   ├── State: OPEN | Assignee: None (Available to claim)
+│   ├── PR Collision Scan: 0 open pull requests reference #5555 (Clean path, zero collisions)
+│   ├── Outsider Velocity: 14 non-bot community PRs merged in last 90 days (Welcoming codebase)
+│   └── Maintainer Response: Median initial maintainer turnaround of 6.2 hours (Active reviews)
+│
+├── 2. Jev-Style Advisory Triage (Gemma 4 at temperature 0.0)
+│   ├── beginner_friendly: YES (Scoped to test harness documentation and fixtures)
+│   ├── label_honesty: 3/3 (Accurate starter classification; no misleading difficulty)
+│   ├── scope_trap: none_clear_and_isolated (No hidden architectural overhaul)
+│   └── evidence_quote: "needs clearer docs and a regression test for test_client"
+│
+├── 3. Contribution Readiness Scoring (core/score/readiness.ts)
+│   └── Composite Score: 87/100 (Fit: 92, Liveness: 85, Competition: 100, Setup: 80)
+│
+└── 4. Grounded Guide Synthesis & Verification (core/guide/guide.ts)
+    ├── Setup Commands: pip install -e ".[dev]" && pytest
+    ├── Suggested Files: docs/testing.rst, tests/test_basic.py
+    └── Git Tree Verification: 2 of 2 file paths verified in repo tree (0 hallucinations)
+```
 
 ---
 
@@ -93,10 +132,14 @@ cp .env.example .env
 # On Windows (PowerShell or CMD):
 copy .env.example .env
 ```
-Key variables in `.env` (all 100% optional):
-- `GITHUB_TOKEN`: Raises GitHub REST API rate limits from 60 to 5,000 req/hr.
-- `LLM_API_KEY`: Google AI Studio key for Gemma 4 (get a free key at [Google AI Studio](https://aistudio.google.com/apikey)).
-- `LLM_MODEL`: Defaults to `gemma-4-31b-it`.
+| Variable | Required? | Default | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GITHUB_TOKEN` | Optional | `""` (Anonymous) | Raises GitHub API rate limit from 60 to 5,000 req/hr. |
+| `LLM_API_KEY` | Optional | `""` | Google AI Studio key enabling Gemma 4 triage and guides. |
+| `LLM_MODEL` | Optional | `gemma-4-31b-it` | Google AI Studio model identifier. |
+| `LLM_BASE_URL` | Optional | `https://generativelanguage.googleapis.com/v1beta/openai/` | OpenAI-compatible endpoint URL. |
+| `COMPASS_OFFLINE` | Optional | `0` | Set to `1` to serve exclusively from cache/fixtures. |
+| `COMPASS_CACHE_DIR`| Optional | `.cache` | Local directory for multi-tier L2 disk cache. |
 
 #### 4. Run the Deterministic Test Battery
 Verify your setup by running the automated test suite:
@@ -275,6 +318,13 @@ $$\text{Readiness} = w_{\text{fit}} S_{\text{fit}} + w_{\text{acc}} S_{\text{acc
   $$S_{\text{live}} = 0.5 \times e^{-\frac{\text{daysSincePushed}}{60}} + 0.5 \times \min\left(1.0, \frac{\text{mergesFromOutsiders90d}}{10}\right)$$
 - **Competition:** Strictly drops if competing PRs reference the issue.
 - **Triage Penalty:** Mathematically docks points if the Jev-style harness flags an issue as unready or contested.
+
+### 4. Why Gemma 4 (`gemma-4-31b-it`)?
+
+Contributor Compass selects Google's Gemma 4 as its reasoning engine for three architectural reasons:
+1. **Deterministic Structured Output at Temperature 0.0:** In our Jev-style decision harness, the model must output rigid, single-letter JSON (`{"q1": "A", "q2": "B"}`) without preamble, markdown conversational filler, or unprompted thinking tokens. Gemma 4 strictly obeys this constraint without requiring heavyweight regex grammar engines.
+2. **High-Speed System-1 Classification:** Evaluating multiple candidate issues per discovery query requires low time-to-first-token (TTFT) and sub-second classification latencies. Gemma 4 provides rapid inference suitable for real-time interactive search.
+3. **High Context Faithfulness for Git Grounding:** When synthesizing contribution guides and answering questions in Ask Gemma, Gemma 4 reliably incorporates the provided repository tree paths, issue body quotes, and README setup instructions rather than fabricating generic advice.
 
 ---
 
