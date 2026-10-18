@@ -51,7 +51,7 @@ const ALIASES: Record<string, string[]> = {
   compression: ["zstd", "lz4", "brotli", "gzip", "archive", "algorithm"],
   cybersecurity: ["security", "cryptography", "infosec", "vulnerability"],
   security: ["cybersecurity", "cryptography", "tls"],
-  astronomy: ["space", "astrophysics", "solar", "science"],
+  astronomy: ["space", "astrophysics", "solar", "cosmology", "telescope"],
 };
 
 const scoutSchema = z.object({
