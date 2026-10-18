@@ -184,6 +184,19 @@ export default function FindByLinkPage() {
             <div style={{ display: "grid", gap: "8px" }}>
               {urls.map((val, idx) => (
                 <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span
+                    className="badge neutral"
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "0.25rem 0.5rem",
+                      fontWeight: 600,
+                      userSelect: "none",
+                      minWidth: "26px",
+                      textAlign: "center",
+                    }}
+                  >
+                    #{idx + 1}
+                  </span>
                   <input
                     className="input"
                     value={val}
@@ -191,25 +204,78 @@ export default function FindByLinkPage() {
                     placeholder={
                       idx === 0
                         ? "e.g. pallets/flask, https://github.com/facebook/react/issues/123, or openstreetmap"
-                        : "e.g. rust-lang/rust or owner/repo#456"
+                        : "e.g. rust-lang/rust, owner/repo#456, or organization"
                     }
                     autoComplete="off"
                     spellCheck={false}
                     style={{ flex: 1 }}
                   />
+                  {/* Plus button directly beside each input to quickly add another link */}
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={addUrlField}
+                    style={{
+                      padding: "7px 12px",
+                      border: "1px solid var(--accent)",
+                      color: "var(--accent)",
+                      background: "rgba(59, 130, 246, 0.08)",
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      borderRadius: "6px",
+                    }}
+                    title="Click + to add another link"
+                    aria-label="Add link"
+                  >
+                    +
+                  </button>
                   {urls.length > 1 && (
                     <button
                       type="button"
                       className="btn btn-ghost"
                       onClick={() => removeUrlField(idx)}
-                      style={{ padding: "8px 12px", color: "var(--warn, #e5b567)" }}
+                      style={{
+                        padding: "7px 10px",
+                        color: "var(--warn, #e5b567)",
+                        border: "1px solid var(--line)",
+                        fontSize: "0.85rem",
+                        borderRadius: "6px",
+                      }}
                       title="Remove this link"
+                      aria-label="Remove link"
                     >
                       ✕
                     </button>
                   )}
                 </div>
               ))}
+            </div>
+
+            <div style={{ marginTop: "10px" }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={addUrlField}
+                style={{
+                  fontSize: "0.82rem",
+                  padding: "6px 14px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  border: "1px dashed var(--accent)",
+                  color: "var(--accent)",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1 }}>+</span>
+                <span>Add another link</span>
+              </button>
             </div>
           </div>
 

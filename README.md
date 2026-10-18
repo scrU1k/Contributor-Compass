@@ -7,6 +7,7 @@
 [![Jev System-1](https://img.shields.io/badge/Decision%20Harness-Jev%20System--1-4285F4?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/core/verify/jev.ts)
 [![Open Source Guide](https://img.shields.io/badge/Open%20Source-Grounded%20Onboarding-34A853?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/core/guide/guide.ts)
 [![Hacktoberfest](https://img.shields.io/badge/Hacktoberfest-2026-FF7518?style=flat-square)](https://hacktoberfest.com/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/LICENSE)
 [![BYOK Privacy](https://img.shields.io/badge/BYOK%20Privacy-Zero%20Required%20Keys-00C853?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/.env.example)
 
 ---
@@ -325,4 +326,8 @@ scripts/              # Prefetch cache warmer & Jev evaluation benchmarks
 
 ## 📜 License
 
-MIT License. Built with ❤️ for open-source newcomers and maintainers everywhere.
+Licensed under the **Apache License, Version 2.0** (the "License"). You may obtain a copy of the License in the [`LICENSE`](file:///c:/Users/niger/Documents/Contributor%20Compass/LICENSE) file or at:
+
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License. Built with ❤️ for open-source newcomers and maintainers everywhere.
