@@ -111,6 +111,30 @@ export const REGISTRY: RegistryRepo[] = [
   repo("dotnet/runtime", ".NET", ["runtime", "backend"], "The .NET runtime."),
   repo("PowerShell/PowerShell", "C#", ["cli", "shell", "devtools"], "Cross-platform PowerShell."),
   repo("apple/swift", "Swift", ["language", "compiler"], "The Swift language."),
+
+  // Astronomy & Space Science
+  repo("astropy/astropy", "Python", ["astronomy", "space", "science", "physics", "data"], "Community Python library for astronomy and astrophysics."),
+  repo("sunpy/sunpy", "Python", ["astronomy", "solar", "science", "physics"], "Python library for solar physics and space weather."),
+  repo("scipy/scipy", "Python", ["science", "math", "algorithms", "data"], "Fundamental algorithms for scientific computing in Python."),
+  repo("sympy/sympy", "Python", ["math", "science", "symbolic", "education"], "Python library for symbolic mathematics."),
+
+  // Robotics & Hardware
+  repo("ros2/ros2", "C++", ["robotics", "automation", "embedded"], "Robot Operating System 2."),
+  repo("ArduPilot/ardupilot", "C++", ["robotics", "drones", "embedded", "autonomous"], "Open-source autopilot software for drones and robotics."),
+
+  // Bioinformatics
+  repo("biopython/biopython", "Python", ["bioinformatics", "biology", "science", "genetics"], "Tools for biological computation and molecular biology."),
+
+  // Security & Networking
+  repo("mitmproxy/mitmproxy", "Python", ["security", "networking", "devtools", "cli"], "Interactive TLS-capable intercepting HTTP proxy."),
+  repo("OWASP/CheatSheetSeries", "Markdown", ["security", "docs", "web", "education"], "Practical security guidance for developers."),
+
+  // Compilers & Systems
+  repo("ziglang/zig", "Zig", ["compiler", "systems", "language"], "General-purpose programming language and toolchain."),
+
+  // Games & Graphics
+  repo("godotengine/godot", "C++", ["games", "graphics", "engine", "ui"], "Free and open source 2D and 3D game engine."),
+  repo("bevyengine/bevy", "Rust", ["games", "graphics", "engine", "rust"], "A refreshingly simple data-driven game engine built in Rust."),
 ];
 
 export function findRepo(fullName: string): RegistryRepo | undefined {

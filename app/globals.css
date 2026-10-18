@@ -11,6 +11,60 @@
   --bad: #e26e6e;
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --card: #ffffff;
+  --line: #e2e8f0;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+}
+
+[data-theme="light"] .site-header {
+  background: rgba(248, 250, 252, 0.88);
+  border-bottom: 1px solid var(--line);
+}
+
+[data-theme="light"] code {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .chip {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+[data-theme="light"] .chip.active {
+  background: #eff6ff;
+  border-color: var(--accent);
+  color: #1e40af;
+}
+
+[data-theme="light"] .btn-ghost {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+[data-theme="light"] .panel,
+[data-theme="light"] .card {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
 * {
   box-sizing: border-box;
 }

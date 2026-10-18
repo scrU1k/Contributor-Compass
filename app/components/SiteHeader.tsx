@@ -1,6 +1,42 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 export function SiteHeader() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [historyCount, setHistoryCount] = useState<number>(0);
+
+  useEffect(() => {
+    // Read theme preference
+    const saved = localStorage.getItem("compass.theme") as "dark" | "light" | null;
+    if (saved === "light" || saved === "dark") {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+      setTheme("light");
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+
+    // Read contribution history count
+    try {
+      const raw = localStorage.getItem("compass.history");
+      if (raw) {
+        const hist = JSON.parse(raw);
+        if (Array.isArray(hist)) setHistoryCount(hist.length);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("compass.theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+  }
+
   return (
     <header className="site-header">
       <div className="container header-inner">
@@ -17,10 +53,43 @@ export function SiteHeader() {
           </svg>
           <span style={{ fontWeight: 650, letterSpacing: "-0.01em" }}>Contribute Compass</span>
         </Link>
-        <nav className="nav" aria-label="Main">
+
+        <nav className="nav" aria-label="Main" style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          {/* Light / Dark Mode Toggle placed just before Find issues */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--line)",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              color: "var(--fg)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+          </button>
+
           <Link href="/">Find issues</Link>
           <Link href="/verify">Verify a link</Link>
           <Link href="/settings">Keys</Link>
+
+          {historyCount > 0 && (
+            <span
+              className="badge ok"
+              title="Issues you have worked on or solved"
+              style={{ fontSize: "0.74rem", padding: "0.15rem 0.5rem" }}
+            >
+              ✓ {historyCount} Solved
+            </span>
+          )}
         </nav>
       </div>
     </header>

@@ -42,13 +42,15 @@ function liveDiscoveryQueries(profile: Profile): string[] {
 }
 
 async function discoverOutsideRegistry(profile: Profile, knownRepos: Set<string>): Promise<IssueCandidate[]> {
-  // Unauthenticated GitHub search is rate-limited to 10 req/min; protect users without tokens
-  if (!env.githubToken()) return [];
+  const queries = liveDiscoveryQueries(profile);
+  // Unauthenticated GitHub search is rate-limited to 10 req/min. If no token, run only the single most focused query.
+  const queriesToRun = env.githubToken() ? queries : queries.slice(-1);
 
   const hits: GhIssue[] = [];
-  for (const query of liveDiscoveryQueries(profile)) {
+  for (const query of queriesToRun) {
+    if (!query) continue;
     try {
-      hits.push(...await searchIssues(query, 30));
+      hits.push(...(await searchIssues(query, 25)));
     } catch {
       // Search is supplemental; curated results remain available on quota/network failures.
     }

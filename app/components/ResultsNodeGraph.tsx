@@ -41,7 +41,7 @@ export function ResultsNodeGraph({
 
   const uniqueRepos = Array.from(repoMap.keys()).slice(0, 4);
 
-  // Layout coordinates (viewBox 0 0 960 420)
+  // Clean, static layout coordinates (viewBox 0 0 960 420)
   const profileX = 90;
   const profileY = 210;
 
@@ -50,7 +50,7 @@ export function ResultsNodeGraph({
     const y = (idx + 1) * repoSpacing + 30;
     return {
       name: repoName,
-      x: 380,
+      x: 370,
       y,
       candidates: repoMap.get(repoName) ?? [],
     };
@@ -64,26 +64,33 @@ export function ResultsNodeGraph({
     const y = (idx + 1) * issueSpacing + 30;
     return {
       candidate: cand,
-      x: 740,
+      x: 730,
       y,
-      parentX: parentRepo?.x ?? 380,
+      parentX: parentRepo?.x ?? 370,
       parentY: parentRepo?.y ?? 210,
     };
   });
 
-  // Clamped position for hover popover to prevent overflow
-  const popoverLeft = hovered ? Math.min(Math.max((hovered.x / 960) * 100, 6), 66) : 0;
-  const popoverTop = hovered ? Math.min(Math.max(hovered.y, 20), 220) : 0;
+  // Clamped stable coordinates for popover card so it never clips and doesn't overlap cursor
+  const popoverLeft = hovered
+    ? hovered.type === "issue"
+      ? 43
+      : hovered.type === "repo"
+        ? 42
+        : 14
+    : 0;
+
+  const popoverTop = hovered ? Math.min(Math.max(hovered.y - 70, 25), 230) : 0;
 
   return (
     <div className="node-graph-container panel" style={{ marginBottom: "2.5rem", position: "relative" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "8px", marginBottom: "0.85rem" }}>
         <div>
-          <span className="eyebrow" style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--accent)", fontWeight: 600 }}>
-            Interactive Verification Topology
+          <span className="eyebrow" style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--accent)", fontWeight: 650 }}>
+            Verification Topology Map
           </span>
-          <h2 style={{ fontSize: "1.3rem", margin: "0.2rem 0 0", fontWeight: 700, letterSpacing: "-0.01em" }}>
-            Discovery & Verdict Knowledge Map
+          <h2 style={{ fontSize: "1.28rem", margin: "0.2rem 0 0", fontWeight: 700, letterSpacing: "-0.01em" }}>
+            Discovery & Readiness Graph
           </h2>
         </div>
         <p className="subtle" style={{ margin: 0, fontSize: "0.82rem" }}>
@@ -132,7 +139,7 @@ export function ResultsNodeGraph({
             </filter>
           </defs>
 
-          {/* Background Grid Pattern for topological graph aesthetic */}
+          {/* Background Grid Pattern */}
           <pattern id="graphGrid" width="40" height="40" patternUnits="userSpaceOnUse">
             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
           </pattern>
@@ -151,10 +158,8 @@ export function ResultsNodeGraph({
                 stroke={isHovered ? "var(--accent)" : "rgba(111, 157, 237, 0.35)"}
                 strokeWidth={isHovered ? 2.8 : 1.5}
                 strokeDasharray={isHovered ? "none" : "5 3"}
-                className="graph-edge-repo"
                 style={{
                   transition: "stroke 0.25s, stroke-width 0.25s",
-                  animation: `edgeFlow ${4 + i * 0.5}s linear infinite`,
                 }}
               />
             );
@@ -174,7 +179,7 @@ export function ResultsNodeGraph({
                 key={`r-i-${i}`}
                 d={path}
                 fill="none"
-                stroke={isHovered ? color : "rgba(95, 211, 154, 0.32)"}
+                stroke={isHovered ? color : "rgba(95, 211, 154, 0.35)"}
                 strokeWidth={isHovered ? 3.2 : 1.5}
                 filter={isHovered ? "url(#nodeGlow)" : undefined}
                 style={{
@@ -184,151 +189,162 @@ export function ResultsNodeGraph({
             );
           })}
 
-          {/* 1. Profile Root Node (with expand entrance & radar pulse physics) */}
-          <g transform={`translate(${profileX}, ${profileY})`}>
+          {/* 1. Profile Root Node (Static, clean, with subtle radar pulse) */}
+          <g
+            transform={`translate(${profileX}, ${profileY})`}
+            style={{ cursor: "pointer" }}
+            onMouseEnter={() => {
+              setHovered({
+                type: "profile",
+                title: profile ? `${profile.tier.toUpperCase()} PROFILE` : "Developer Profile",
+                subtitle: "Match anchor & preferences",
+                badge: { label: profile?.timeBudget ?? "weekend", tone: "neutral" },
+                details: [
+                  `Languages: ${profile?.stack.map((s) => s.tech).join(", ") || "General"}`,
+                  `Goal: ${profile?.goal ?? "learn"}`,
+                  `Experience: ${profile?.experienceLevel ?? "newcomer"}`,
+                ],
+                x: profileX,
+                y: profileY,
+              });
+            }}
+            onMouseLeave={() => setHovered(null)}
+          >
             {/* Animated Radar Pulse waves */}
-            <circle className="radar-pulse-ring" fill="none" stroke="var(--accent)" strokeWidth={1.5} />
-            <circle className="radar-pulse-ring-delayed" fill="none" stroke="var(--accent)" strokeWidth={1} />
+            <circle className="radar-pulse-ring" fill="none" stroke="var(--accent)" strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+            <circle className="radar-pulse-ring-delayed" fill="none" stroke="var(--accent)" strokeWidth={1} style={{ pointerEvents: "none" }} />
 
-            <g
-              className="graph-node-inner root-node"
-              style={{ cursor: "pointer" }}
-              onMouseEnter={() => {
-                setHovered({
-                  type: "profile",
-                  title: profile ? `${profile.tier.toUpperCase()} PROFILE` : "Developer Profile",
-                  subtitle: "Match anchor & preferences",
-                  badge: { label: profile?.timeBudget ?? "weekend", tone: "neutral" },
-                  details: [
-                    `Languages: ${profile?.stack.map((s) => s.tech).join(", ") || "General"}`,
-                    `Goal: ${profile?.goal ?? "learn"}`,
-                    `Experience: ${profile?.experienceLevel ?? "newcomer"}`,
-                  ],
-                  x: profileX + 45,
-                  y: profileY - 20,
-                });
-              }}
-              onMouseLeave={() => setHovered(null)}
-            >
-              <circle r={32} fill="#141926" stroke="var(--accent)" strokeWidth={2.5} filter="url(#nodeGlow)" />
-              <circle r={38} fill="none" stroke="var(--accent)" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="3 3" />
-              <text textAnchor="middle" dy="-4" fill="#e8ecf3" fontSize="12" fontWeight="600">
-                YOU
-              </text>
-              <text textAnchor="middle" dy="12" fill="var(--muted)" fontSize="9">
-                {profile?.stack[0]?.tech ?? "Dev"}
-              </text>
-            </g>
+            {/* Hit circle */}
+            <circle r={38} fill="transparent" />
+
+            <circle r={32} fill="#141926" stroke="var(--accent)" strokeWidth={2.5} filter="url(#nodeGlow)" style={{ pointerEvents: "none" }} />
+            <circle r={38} fill="none" stroke="var(--accent)" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="3 3" style={{ pointerEvents: "none" }} />
+            <text textAnchor="middle" dy="-4" fill="#e8ecf3" fontSize="12" fontWeight="600" style={{ pointerEvents: "none", userSelect: "none" }}>
+              YOU
+            </text>
+            <text textAnchor="middle" dy="12" fill="var(--muted)" fontSize="9" style={{ pointerEvents: "none", userSelect: "none" }}>
+              {profile?.stack[0]?.tech ?? "Dev"}
+            </text>
           </g>
 
-          {/* 2. Repository Nodes (with spring expand entrance & staggered float physics) */}
+          {/* 2. Repository Nodes (Firmly static, large hit target) */}
           {repoNodes.map((r, i) => {
             const shortName = r.name.split("/")[1] || r.name;
             const signals = r.candidates[0]?.signals;
             const isHovered = hovered?.type === "repo" && hovered.title === r.name;
-            const floatAnim = i % 2 === 0 ? "nodePhysicsA" : "nodePhysicsB";
 
             return (
-              <g key={`repo-node-${i}`} transform={`translate(${r.x}, ${r.y})`}>
-                <g
-                  className={`graph-node-inner repo-node ${floatAnim}`}
+              <g
+                key={`repo-node-${i}`}
+                transform={`translate(${r.x}, ${r.y})`}
+                style={{ cursor: "pointer" }}
+                onMouseEnter={() => {
+                  setHovered({
+                    type: "repo",
+                    title: r.name,
+                    subtitle: signals?.description ?? "Scouted repository",
+                    badge: { label: `${signals?.stars ?? 0} ★`, tone: "neutral" },
+                    details: [
+                      `CI Workflow: ${signals?.hasCI ? "Present ✓" : "None"}`,
+                      `Outsider Merges: ${signals?.mergedPRsFromOutsiders90d ?? 0} in 90d`,
+                      `Documentation: ${signals?.hasContributing ? "CONTRIBUTING.md ✓" : "README only"}`,
+                      `Candidate Issues: ${r.candidates.length}`,
+                    ],
+                    x: r.x,
+                    y: r.y,
+                  });
+                }}
+                onMouseLeave={() => setHovered(null)}
+              >
+                {/* Generous hit area */}
+                <circle r={32} fill="transparent" />
+
+                <circle
+                  r={22}
+                  fill="#182032"
+                  stroke={isHovered ? "var(--accent)" : "rgba(111, 157, 237, 0.85)"}
+                  strokeWidth={isHovered ? 2.8 : 1.6}
+                  filter={isHovered ? "url(#intenseGlow)" : "url(#nodeGlow)"}
                   style={{
-                    cursor: "pointer",
-                    animationDelay: `${0.12 + i * 0.12}s`,
+                    pointerEvents: "none",
+                    transform: isHovered ? "scale(1.12)" : "scale(1)",
+                    transformOrigin: "center",
+                    transformBox: "fill-box",
+                    transition: "transform 0.2s ease, stroke 0.2s ease",
                   }}
-                  onMouseEnter={() => {
-                    setHovered({
-                      type: "repo",
-                      title: r.name,
-                      subtitle: signals?.description ?? "Scouted repository",
-                      badge: { label: `${signals?.stars ?? 0} ★`, tone: "neutral" },
-                      details: [
-                        `CI Workflow: ${signals?.hasCI ? "Present ✓" : "None"}`,
-                        `Outsider Merges: ${signals?.mergedPRsFromOutsiders90d ?? 0} in 90d`,
-                        `Documentation: ${signals?.hasContributing ? "CONTRIBUTING.md ✓" : "README only"}`,
-                        `Candidate Issues: ${r.candidates.length}`,
-                      ],
-                      x: r.x + 35,
-                      y: r.y - 30,
-                    });
-                  }}
-                  onMouseLeave={() => setHovered(null)}
-                >
-                  <circle
-                    r={22}
-                    fill="#182032"
-                    stroke={isHovered ? "var(--accent)" : "rgba(111, 157, 237, 0.85)"}
-                    strokeWidth={isHovered ? 2.8 : 1.6}
-                    filter={isHovered ? "url(#intenseGlow)" : "url(#nodeGlow)"}
-                  />
-                  <text textAnchor="middle" dy="-2" fill="#e8ecf3" fontSize="10" fontWeight="600">
-                    {shortName.slice(0, 9)}
-                  </text>
-                  <text textAnchor="middle" dy="10" fill="var(--muted)" fontSize="8">
-                    {signals?.language ?? "Repo"}
-                  </text>
-                </g>
+                />
+                <text textAnchor="middle" dy="-2" fill="#e8ecf3" fontSize="10" fontWeight="600" style={{ pointerEvents: "none", userSelect: "none" }}>
+                  {shortName.slice(0, 9)}
+                </text>
+                <text textAnchor="middle" dy="10" fill="var(--muted)" fontSize="8" style={{ pointerEvents: "none", userSelect: "none" }}>
+                  {signals?.language ?? "Repo"}
+                </text>
               </g>
             );
           })}
 
-          {/* 3. Issue Nodes (with spring expand entrance, float drift, and hover menu) */}
+          {/* 3. Issue Nodes (Firmly static, reliable hover menu) */}
           {issueNodes.map((item, i) => {
             const c = item.candidate;
             const v = verdict(c);
             const isHovered = hovered?.candidate?.url === c.url;
             const strokeColor =
               v.tone === "good" ? "var(--ok, #5fd39a)" : v.tone === "warn" ? "var(--warn, #e5b567)" : "var(--bad, #e26e6e)";
-            const floatAnim = i % 3 === 0 ? "nodePhysicsA" : i % 3 === 1 ? "nodePhysicsB" : "nodePhysicsC";
 
             return (
-              <g key={`issue-node-${i}`} transform={`translate(${item.x}, ${item.y})`}>
-                <g
-                  className={`graph-node-inner issue-node ${floatAnim}`}
+              <g
+                key={`issue-node-${i}`}
+                transform={`translate(${item.x}, ${item.y})`}
+                style={{ cursor: "pointer" }}
+                onClick={() => onSelectCandidate(c)}
+                onMouseEnter={() => {
+                  setHovered({
+                    type: "issue",
+                    title: `#${c.number}: ${c.title}`,
+                    subtitle: `${c.repo} • Readiness: ${c.score.total.toFixed(0)}/100`,
+                    badge: { label: v.label, tone: v.tone },
+                    details: [
+                      `Effort: ${c.sizeHint}`,
+                      `Competition: ${c.linkedOpenPRs === 0 ? "0 open PRs ✓" : `${c.linkedOpenPRs} open PRs`}`,
+                      `Assignment: ${c.assigned ? "Assigned" : "Unassigned ✓"}`,
+                    ],
+                    quote: c.jevDecision?.quoteVerified ? c.jevDecision.quote : null,
+                    candidate: c,
+                    x: item.x,
+                    y: item.y,
+                  });
+                }}
+                onMouseLeave={() => setHovered(null)}
+              >
+                {/* Generous hit area covering node and label */}
+                <rect x={-24} y={-16} width={220} height={32} fill="transparent" />
+
+                <circle
+                  r={18}
+                  fill="#151b29"
+                  stroke={strokeColor}
+                  strokeWidth={isHovered ? 3.2 : 2}
+                  filter={isHovered ? "url(#intenseGlow)" : undefined}
                   style={{
-                    cursor: "pointer",
-                    animationDelay: `${0.22 + i * 0.1}s`,
+                    pointerEvents: "none",
+                    transform: isHovered ? "scale(1.15)" : "scale(1)",
+                    transformOrigin: "center",
+                    transformBox: "fill-box",
+                    transition: "transform 0.2s ease, stroke 0.2s ease",
                   }}
-                  onClick={() => onSelectCandidate(c)}
-                  onMouseEnter={() => {
-                    setHovered({
-                      type: "issue",
-                      title: `#${c.number}: ${c.title}`,
-                      subtitle: `${c.repo} • Readiness: ${c.score.total.toFixed(0)}/100`,
-                      badge: { label: v.label, tone: v.tone },
-                      details: [
-                        `Effort: ${c.sizeHint}`,
-                        `Competition: ${c.linkedOpenPRs === 0 ? "0 open PRs ✓" : `${c.linkedOpenPRs} open PRs`}`,
-                        `Assignment: ${c.assigned ? "Assigned" : "Unassigned ✓"}`,
-                      ],
-                      quote: c.jevDecision?.quoteVerified ? c.jevDecision.quote : null,
-                      candidate: c,
-                      x: item.x - 220,
-                      y: item.y - 40,
-                    });
-                  }}
-                  onMouseLeave={() => setHovered(null)}
-                >
-                  <circle
-                    r={18}
-                    fill="#151b29"
-                    stroke={strokeColor}
-                    strokeWidth={isHovered ? 3.2 : 2}
-                    filter={isHovered ? "url(#intenseGlow)" : undefined}
-                  />
-                  <text textAnchor="middle" dy="4" fill="#e8ecf3" fontSize="9" fontWeight="bold">
-                    #{c.number}
-                  </text>
-                  <text x="24" y="4" fill="#cbd5e1" fontSize="10.5" fontWeight="500">
-                    {c.title.length > 25 ? `${c.title.slice(0, 25)}…` : c.title}
-                  </text>
-                </g>
+                />
+                <text textAnchor="middle" dy="4" fill="#e8ecf3" fontSize="9" fontWeight="bold" style={{ pointerEvents: "none", userSelect: "none" }}>
+                  #{c.number}
+                </text>
+                <text x="26" y="4" fill={isHovered ? "var(--fg)" : "#cbd5e1"} fontSize="10.5" fontWeight={isHovered ? "600" : "500"} style={{ pointerEvents: "none", userSelect: "none" }}>
+                  {c.title.length > 25 ? `${c.title.slice(0, 25)}…` : c.title}
+                </text>
               </g>
             );
           })}
         </svg>
 
-        {/* Hover Popover Card / Contextual Menu with grounded quote */}
+        {/* Stable Hover Popover Card positioned cleanly to the side */}
         {hovered && (
           <div
             className="graph-hover-popover"
@@ -336,19 +352,18 @@ export function ResultsNodeGraph({
               position: "absolute",
               left: `${popoverLeft}%`,
               top: `${popoverTop}px`,
-              transform: "translate(-10%, -20%)",
               zIndex: 30,
               pointerEvents: "auto",
-              minWidth: "270px",
-              maxWidth: "340px",
-              background: "rgba(18, 23, 36, 0.96)",
+              minWidth: "280px",
+              maxWidth: "350px",
+              background: "rgba(18, 23, 36, 0.97)",
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
               border: "1px solid var(--line)",
               boxShadow: "0 16px 36px rgba(0,0,0,0.55), 0 0 20px rgba(111,157,237,0.18)",
               borderRadius: "10px",
               padding: "0.9rem 1.1rem",
-              animation: "popoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+              animation: "popoverIn 0.15s ease-out",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "4px" }}>
@@ -395,59 +410,7 @@ export function ResultsNodeGraph({
       </div>
 
       <style jsx>{`
-        /* 1. Expand Out Entrance Physics */
-        @keyframes expandOut {
-          0% {
-            opacity: 0;
-            transform: scale(0.1);
-          }
-          65% {
-            transform: scale(1.14);
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        /* 2. Organic Multi-axis Floating Physics */
-        @keyframes nodeFloatA {
-          0% {
-            transform: translate(0px, 0px);
-          }
-          50% {
-            transform: translate(1.5px, -5px);
-          }
-          100% {
-            transform: translate(-1px, 2px);
-          }
-        }
-
-        @keyframes nodeFloatB {
-          0% {
-            transform: translate(0px, 0px);
-          }
-          50% {
-            transform: translate(-2px, -4.5px);
-          }
-          100% {
-            transform: translate(1.5px, 2.5px);
-          }
-        }
-
-        @keyframes nodeFloatC {
-          0% {
-            transform: translate(0px, 0px);
-          }
-          50% {
-            transform: translate(2px, -3.5px);
-          }
-          100% {
-            transform: translate(-1.5px, 3px);
-          }
-        }
-
-        /* 3. Radar Pulse Rings */
+        /* Radar Pulse Rings */
         @keyframes radarExpand {
           0% {
             r: 32px;
@@ -459,63 +422,23 @@ export function ResultsNodeGraph({
           }
         }
 
-        /* 4. Popover Entrance */
+        /* Popover Entrance */
         @keyframes popoverIn {
           0% {
             opacity: 0;
-            transform: translate(-10%, -15%) scale(0.96);
+            transform: scale(0.97);
           }
           100% {
             opacity: 1;
-            transform: translate(-10%, -20%) scale(1);
+            transform: scale(1);
           }
         }
 
-        /* Applied styles */
         .radar-pulse-ring {
           animation: radarExpand 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
         }
         .radar-pulse-ring-delayed {
           animation: radarExpand 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) 1.4s infinite;
-        }
-
-        .graph-node-inner {
-          transform-box: fill-box;
-          transform-origin: center;
-          animation: expandOut 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-          transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease;
-        }
-
-        .graph-node-inner:hover {
-          transform: scale(1.18) !important;
-        }
-
-        .root-node:hover {
-          transform: scale(1.1) !important;
-        }
-
-        .nodePhysicsA {
-          animation: expandOut 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both,
-            nodeFloatA 3.4s ease-in-out infinite alternate 0.5s;
-        }
-
-        .nodePhysicsB {
-          animation: expandOut 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both,
-            nodeFloatB 3.8s ease-in-out infinite alternate 0.5s;
-        }
-
-        .nodePhysicsC {
-          animation: expandOut 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both,
-            nodeFloatC 4.2s ease-in-out infinite alternate 0.5s;
-        }
-
-        @keyframes edgeFlow {
-          0% {
-            stroke-dashoffset: 0;
-          }
-          100% {
-            stroke-dashoffset: -40;
-          }
         }
       `}</style>
     </div>

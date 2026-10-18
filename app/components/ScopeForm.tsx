@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import type {
   ContributionType,
   ExperienceLevel,
@@ -13,6 +14,7 @@ import type {
 } from "@/core/types";
 import { ChipGroup, type ChipOption } from "./ChipGroup";
 import { TierToggle } from "./TierToggle";
+import { loadSettings } from "../lib/settings";
 
 const BASE_INTERESTS: ChipOption<string>[] = [
   "Web",
@@ -102,6 +104,25 @@ export function ScopeForm() {
   const [showOtherStack, setShowOtherStack] = useState(false);
   const [customStackInput, setCustomStackInput] = useState("");
 
+  // No API key notice modal state
+  const [pendingProfile, setPendingProfile] = useState<Profile | null>(null);
+  const [countdown, setCountdown] = useState(3);
+
+  useEffect(() => {
+    if (!pendingProfile) return;
+
+    if (countdown <= 0) {
+      proceedToResults(pendingProfile);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [pendingProfile, countdown]);
+
   function addCustomInterest() {
     const val = customInterestInput.trim();
     if (val && !interests.includes(val)) {
@@ -116,6 +137,13 @@ export function ScopeForm() {
       setStack((prev) => [...prev, val]);
       setCustomStackInput("");
     }
+  }
+
+  function proceedToResults(prof: Profile) {
+    sessionStorage.removeItem("compass.results");
+    sessionStorage.removeItem("compass.scout");
+    sessionStorage.setItem("compass.profile", JSON.stringify(prof));
+    router.push("/results");
   }
 
   function submit(event: FormEvent) {
@@ -141,11 +169,17 @@ export function ScopeForm() {
       issueSize: tier === "newcomer" ? "any" : size,
     };
 
-    // Clear stale cached results on fresh submission
-    sessionStorage.removeItem("compass.results");
-    sessionStorage.removeItem("compass.scout");
-    sessionStorage.setItem("compass.profile", JSON.stringify(profile));
-    router.push("/results");
+    // If user has not configured any keys in Settings, show the quick notice dialog
+    const settings = loadSettings();
+    const hasKeys = Boolean(settings.llmApiKey.trim() || settings.githubToken.trim());
+
+    if (!hasKeys) {
+      setPendingProfile(profile);
+      setCountdown(3);
+      return;
+    }
+
+    proceedToResults(profile);
   }
 
   // Combine base options with custom ones
@@ -164,7 +198,7 @@ export function ScopeForm() {
   ];
 
   return (
-    <form className="panel" onSubmit={submit}>
+    <form className="panel" onSubmit={submit} style={{ position: "relative" }}>
       <TierToggle value={tier} onChange={setTier} />
 
       {tier === "newcomer" && (
@@ -366,6 +400,67 @@ export function ScopeForm() {
         </a>{" "}
         instead.
       </p>
+
+      {/* Auto-fading Dialog if No API Key or GitHub Token is Configured */}
+      {pendingProfile && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            backdropFilter: "blur(6px)",
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+            animation: "fadeIn 0.2s ease-out",
+          }}
+        >
+          <div
+            className="panel"
+            style={{
+              maxWidth: "460px",
+              width: "100%",
+              border: "1px solid var(--accent)",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
+              padding: "1.5rem",
+              background: "var(--card, #141926)",
+              borderRadius: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "0.85rem" }}>
+              <span style={{ fontSize: "1.5rem" }}>⚠️</span>
+              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
+                No API Key or Token Registered
+              </h3>
+            </div>
+
+            <p style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "var(--muted)", margin: "0 0 1rem" }}>
+              Live discovery across GitHub and Gemma AI semantic reasoning require credentials.
+              Without them, we are serving our <strong>Curated Baseline Catalog</strong>.
+            </p>
+
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Link
+                href="/settings"
+                className="btn btn-primary"
+                style={{ fontSize: "0.84rem", padding: "6px 14px" }}
+              >
+                Configure Keys in Settings ➔
+              </Link>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: "0.84rem", padding: "6px 14px" }}
+                onClick={() => proceedToResults(pendingProfile)}
+              >
+                Continue with Baseline ({countdown}s)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

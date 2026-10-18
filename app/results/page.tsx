@@ -8,7 +8,7 @@ import { CandidateCard } from "../components/CandidateCard";
 import { ResultsNodeGraph } from "../components/ResultsNodeGraph";
 import { SiteHeader } from "../components/SiteHeader";
 import { SkeletonList } from "../components/Skeleton";
-import { settingsHeaders } from "../lib/settings";
+import { loadSettings, settingsHeaders } from "../lib/settings";
 
 interface ScoutInfo {
   source: "gemma" | "registry" | "hybrid";
@@ -29,6 +29,7 @@ export default function ResultsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasKeys, setHasKeys] = useState(true);
 
   const fetchIssues = useCallback(async (parsedProfile: Profile) => {
     try {
@@ -79,6 +80,7 @@ export default function ResultsPage() {
       return;
     }
     setProfile(parsed);
+    setHasKeys(Boolean(loadSettings().llmApiKey.trim() || loadSettings().githubToken.trim()));
 
     // Check if we already have cached search results in sessionStorage
     const cachedResultsRaw = sessionStorage.getItem("compass.results");
@@ -139,6 +141,37 @@ export default function ResultsPage() {
             </Link>
           </div>
         </div>
+
+        {!hasKeys && (
+          <div
+            className="panel"
+            style={{
+              background: "rgba(229, 181, 103, 0.08)",
+              border: "1px solid var(--warn, #e5b567)",
+              padding: "0.85rem 1.15rem",
+              marginBottom: "1.25rem",
+              borderRadius: "8px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "10px",
+            }}
+          >
+            <div>
+              <strong style={{ color: "var(--warn, #e5b567)", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.88rem" }}>
+                <span>⚠️</span> Curated Baseline Mode (Offline / Cache Fallback)
+              </strong>
+              <p className="subtle" style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "var(--muted)" }}>
+                Currently displaying verified issues from curated repositories.
+                To unlock live real-time GitHub discovery across 300M+ repos for specific interests like &ldquo;{profile?.interests[0] || "astronomy"}&rdquo;, configure a GitHub token in Settings.
+              </p>
+            </div>
+            <Link href="/settings" className="btn btn-ghost" style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>
+              Add Keys in Settings ➔
+            </Link>
+          </div>
+        )}
 
         {scout && scout.repos.length > 0 && (
           <p className="subtle" style={{ marginBottom: 16 }}>
