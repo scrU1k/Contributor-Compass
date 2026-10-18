@@ -32,6 +32,18 @@ export function parseGitHubTarget(input: string): GitHubTarget | null {
         };
       }
     } else if (parts.length === 2) {
+      if (parts[1].includes("#")) {
+        const [repoName, numStr] = parts[1].split("#");
+        const num = Number(numStr);
+        if (/^[A-Za-z0-9_-]+$/.test(parts[0]) && /^[A-Za-z0-9_.-]+$/.test(repoName) && !isNaN(num) && num > 0) {
+          return {
+            kind: "issue",
+            repo: `${parts[0]}/${repoName}`,
+            number: num,
+            rawUrl: `https://github.com/${parts[0]}/${repoName}/issues/${num}`,
+          };
+        }
+      }
       if (/^[A-Za-z0-9_-]+$/.test(parts[0]) && /^[A-Za-z0-9_.-]+$/.test(parts[1])) {
         return {
           kind: "repo",

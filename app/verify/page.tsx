@@ -42,7 +42,11 @@ export default function FindByLinkPage() {
   function handleUrlChange(index: number, value: string) {
     setUrls((prev) => {
       const next = [...prev];
-      next[index] = value;
+      let clean = value;
+      if (clean.startsWith("https://github.com/") && clean.length > 50) {
+        clean = clean.replace(/^https:\/\/github\.com\//, "");
+      }
+      next[index] = clean.slice(0, 50);
       return next;
     });
   }
@@ -180,6 +184,7 @@ export default function FindByLinkPage() {
                   </span>
                   <input
                     className="input"
+                    maxLength={50}
                     value={val}
                     onChange={(e) => handleUrlChange(idx, e.target.value)}
                     placeholder={

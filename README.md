@@ -23,19 +23,46 @@ npm install
 # 2. Run the automated test suite (17 tests, pure deterministic assertions)
 npm test
 
-# 3. Launch the Terminal Edition (CLI)
+# 3. Launch the Web Application (GUI / localhost)
+npm run dev
+# -> Open your browser at http://localhost:3000
+
+# 4. (Optional) Run the production build locally
+npm run build
+npm start
+# -> Open your browser at http://localhost:3000
+
+# 5. Launch the Terminal Edition (CLI)
 npm run cli
 
 # Or pass a natural-language query directly:
 npm run cli -- "I know Python and docs, looking for starter issues in pallets/flask"
 
-# 4. Launch the Web UI
-npm run dev
-# Open http://localhost:3000
+# Or configure your API keys for the CLI:
+npm run cli -- --keys
 ```
 
+### 🌐 Running the Web Application (Localhost GUI)
+
+To run Contributor Compass locally in your browser:
+
+1. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+2. **Open the application:** Navigate to [**`http://localhost:3000`**](http://localhost:3000) in your web browser.
+3. **What's included out of the box:**
+   - **Interactive PR Scope Form (`/`):** Choose your experience tier (Newcomer vs. Experienced), stack, and interests to generate your personalized open-source plan.
+   - **Find by Link (`/verify`):** Paste single or multiple GitHub links (issues, repositories, or entire organizations) with optional custom focus tags to verify feasibility before you write code.
+   - **Interactive Topology Node Graph (`/results`):** Inspect relationships between repos, issues, and tech stacks in a stable, static layout with click-to-pin popovers.
+   - **Grounded Contribution Guides (`/guide`):** Step-by-step contribution plans featuring file citations cross-checked against the real Git tree.
+   - **Ask Gemma Assistant (`/guide`):** Ask targeted questions about any issue ("How do I set up tests?", "Where is this defined?") answered by Gemma using grounded repository signals.
+   - **Search History & Saved Bookmarks (`/history`):** Review prior searches, inspect snapshots, and access saved issues across browser sessions.
+   - **Dark / Light Mode Toggle:** Pure SVG theme switcher in the top bar.
+   - **Bring Your Own Key (`/settings`):** Securely enter a Google AI Studio Gemma API Key and GitHub Token stored solely in browser `localStorage` and sent request-scoped.
+
 > **Optional Bring-Your-Own-Key (BYOK):**  
-> To test live Gemma 4 semantic checks and AI guide generation, enter your [Google AI Studio API Key](https://aistudio.google.com/apikey) and GitHub Token in **`/settings`** (Web UI) or add them to `.env` (CLI). In the Web UI, keys are stored in the browser's `localStorage` and transmitted per-request via headers; the Node.js server scopes them strictly to that request via `AsyncLocalStorage` and never persists them to server disks, databases, or logs.
+> To test live Gemma 4 semantic checks and AI guide generation, enter your [Google AI Studio API Key](https://aistudio.google.com/apikey) and GitHub Token in **`/settings`** (Web UI) or add them to `.env` / CLI via `npm run cli -- --keys`. In the Web UI, keys are stored in the browser's `localStorage` and transmitted per-request via headers; the Node.js server scopes them strictly to that request via `AsyncLocalStorage` and never persists them to server disks, databases, or logs.
 
 ---
 
@@ -128,10 +155,10 @@ Contributor Compass provides a clean, responsive, and developer-first web interf
    - **Smart Tooltip:** When no issues are saved, hovering or clicking displays an informative tooltip guiding newcomers on how to bookmark issues.
    - **Instant Backdrop Modal:** When issues are saved, a badge counter lights up. Clicking opens a modal listing all bookmarked issues with direct actions to **"Get the guide ➔"**, inspect on **GitHub**, or remove bookmarks.
 
-3. **Find by Link — Multi-Target & Custom Tags (`/verify`):**
+3. **Find by Link — Multi-Target & Semantic Tags (`/verify`):**
    - Prominently styled in the top navigation and hero section for direct side-door exploration.
-   - **Multi-Link Verification:** Users can dynamically click **`+ Add another link`** to input multiple repositories, issues, or organizations simultaneously. All links are evaluated concurrently with unified filters (`isPromising`, `hasNotReadyLabels`, `fitsHardConstraints`).
-   - **Custom Tags & Focus Areas:** Enter custom comma-separated tags or click quick suggestions (e.g. `good first issue`, `documentation`, `python`, `bug`) to focus and prioritize issues matching specific labels, languages, or keywords.
+   - **Multi-Link Verification:** Users can dynamically click the inline **`+`** button beside any link input row to evaluate multiple repositories, issues, or organizations simultaneously (with a clean, silent 50-character limit per entry). All links are evaluated concurrently with unified filters (`isPromising`, `hasNotReadyLabels`, `fitsHardConstraints`).
+   - **Semantic Custom Tags & Focus Areas:** Enter custom comma-separated tags or click quick suggestions (e.g. `astronomy`, `game dev`, `security`, `documentation`, `python`) to focus and prioritize issues. When configured, Gemma semantically associates domain terms (e.g., astrophysics/FITS to astronomy; shaders/engines to game dev) with graceful fallback to keyword matching.
    - **Unified Filtering & Resilient Degradation:** Applies identical quality gates across single repos, whole organizations, or specific issue numbers.
 
 4. **Interactive Static Node Graph (`/results`):**
@@ -220,17 +247,23 @@ npm test
 Open-source contributors and maintainers live in the terminal:
 
 ```bash
-# Interactive natural-language prompt
+# 1. Interactive questionnaire (or type "I am a beginner" / "I am experienced")
 npm run cli
 
-# Targeted query
+# 2. View full CLI reference and options
+npm run cli -- --help
+
+# 3. Configure Bring-Your-Own-Key credentials interactively
+npm run cli -- --keys
+
+# 4. One-shot natural language search
 npm run cli -- "I know TypeScript and React, looking for quick bug fixes"
 
-# Scan an entire organization
+# 5. Budgeted discovery across an organization
 npm run cli -- --org openstreetmap
 
-# Live-verify a single issue directly
-npm run cli -- --issue https://github.com/pallets/flask/issues/5555
+# 6. Live-verify a single issue directly
+npm run cli -- --issue pallets/flask#5555
 ```
 
 ```
