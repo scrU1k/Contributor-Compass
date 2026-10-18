@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 export function SiteHeader() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [historyCount, setHistoryCount] = useState<number>(0);
+  const [savedCount, setSavedCount] = useState<number>(0);
 
   useEffect(() => {
     // Read theme preference
@@ -18,16 +19,28 @@ export function SiteHeader() {
       document.documentElement.setAttribute("data-theme", "light");
     }
 
-    // Read contribution history count
-    try {
-      const raw = localStorage.getItem("compass.history");
-      if (raw) {
-        const hist = JSON.parse(raw);
-        if (Array.isArray(hist)) setHistoryCount(hist.length);
+    // Read contribution history count & saved count
+    const updateCounts = () => {
+      try {
+        const rawHist = localStorage.getItem("compass.history");
+        if (rawHist) {
+          const hist = JSON.parse(rawHist);
+          if (Array.isArray(hist)) setHistoryCount(hist.length);
+        }
+
+        const rawSaved = localStorage.getItem("compass.saved_issues");
+        if (rawSaved) {
+          const savedList = JSON.parse(rawSaved);
+          if (Array.isArray(savedList)) setSavedCount(savedList.length);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
+    };
+
+    updateCounts();
+    window.addEventListener("storage", updateCounts);
+    return () => window.removeEventListener("storage", updateCounts);
   }, []);
 
   function toggleTheme() {
@@ -55,7 +68,7 @@ export function SiteHeader() {
         </Link>
 
         <nav className="nav" aria-label="Main" style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-          {/* Light / Dark Mode Toggle placed just before Find issues */}
+          {/* Pure SVG Icon for Light / Dark Mode Toggle placed just before Find issues */}
           <button
             type="button"
             onClick={toggleTheme}
@@ -65,29 +78,78 @@ export function SiteHeader() {
               background: "transparent",
               border: "1px solid var(--line)",
               borderRadius: "6px",
-              padding: "4px 8px",
+              padding: "6px 8px",
               cursor: "pointer",
-              fontSize: "0.85rem",
               color: "var(--fg)",
               display: "inline-flex",
               alignItems: "center",
-              gap: "4px",
+              justifyContent: "center",
+              lineHeight: 1,
             }}
           >
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+            {theme === "dark" ? (
+              // Crisp Sun SVG Icon for Dark Mode (click to switch to light)
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            ) : (
+              // Crisp Moon SVG Icon for Light Mode (click to switch to dark)
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
           </button>
 
           <Link href="/">Find issues</Link>
           <Link href="/verify">Verify a link</Link>
           <Link href="/settings">Keys</Link>
 
+          {savedCount > 0 && (
+            <Link
+              href="/results?tab=saved"
+              className="badge neutral"
+              title="View bookmarked issues"
+              style={{ fontSize: "0.74rem", padding: "0.2rem 0.55rem", textDecoration: "none" }}
+            >
+              ★ {savedCount} Saved
+            </Link>
+          )}
+
           {historyCount > 0 && (
             <span
               className="badge ok"
-              title="Issues you have worked on or solved"
-              style={{ fontSize: "0.74rem", padding: "0.15rem 0.5rem" }}
+              title="Issues you marked as solved, PR opened, or merged"
+              style={{ fontSize: "0.74rem", padding: "0.2rem 0.55rem" }}
             >
-              ✓ {historyCount} Solved
+              ✓ {historyCount} Tracked
             </span>
           )}
         </nav>

@@ -29,6 +29,7 @@ export default function GuidePage() {
 
   // Status tracking (Solved / PR Created / Merged)
   const [status, setStatus] = useState<"solved" | "pr_created" | "merged" | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
 
   // Ask Gemma states
   const [showAsk, setShowAsk] = useState(false);
@@ -63,6 +64,12 @@ export default function GuidePage() {
         const hist = JSON.parse(histRaw) as HistoryItem[];
         const item = hist.find((h) => h.repo === selected.repo && h.number === selected.number);
         if (item) setStatus(item.status);
+      }
+
+      const savedRaw = localStorage.getItem("compass.saved_issues");
+      if (savedRaw) {
+        const savedList = JSON.parse(savedRaw) as { repo: string; number: number }[];
+        setIsSaved(savedList.some((s) => s.repo === selected.repo && s.number === selected.number));
       }
     } catch {
       // ignore
@@ -106,6 +113,42 @@ export default function GuidePage() {
     };
   }, [router]);
 
+  function toggleSave() {
+    if (!payload) return;
+    const c = payload.candidate;
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+
+    try {
+      const raw = localStorage.getItem("compass.saved_issues");
+      interface SavedItem {
+        repo: string;
+        number: number;
+        title: string;
+        url: string;
+        candidate: RankedCandidate;
+        savedAt: string;
+      }
+      let list: SavedItem[] = raw ? JSON.parse(raw) : [];
+      list = list.filter((i) => !(i.repo === c.repo && i.number === c.number));
+
+      if (nextSaved) {
+        list.push({
+          repo: c.repo,
+          number: c.number,
+          title: c.title,
+          url: c.url,
+          candidate: c,
+          savedAt: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem("compass.saved_issues", JSON.stringify(list));
+      window.dispatchEvent(new Event("storage"));
+    } catch {
+      // ignore
+    }
+  }
+
   function markStatus(newStatus: "solved" | "pr_created" | "merged") {
     if (!payload) return;
     const c = payload.candidate;
@@ -128,6 +171,7 @@ export default function GuidePage() {
         });
       }
       localStorage.setItem("compass.history", JSON.stringify(list));
+      window.dispatchEvent(new Event("storage"));
     } catch {
       // ignore
     }
@@ -238,6 +282,15 @@ export default function GuidePage() {
 
               {/* Status Action Buttons */}
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={`btn ${isSaved ? "btn-primary" : "btn-ghost"}`}
+                  style={{ padding: "5px 10px", fontSize: "0.78rem" }}
+                  onClick={toggleSave}
+                  title={isSaved ? "Remove from saved issues" : "Save issue for later"}
+                >
+                  {isSaved ? "★ Saved" : "☆ Save for later"}
+                </button>
                 <button
                   type="button"
                   className={`btn ${status === "solved" ? "btn-primary" : "btn-ghost"}`}

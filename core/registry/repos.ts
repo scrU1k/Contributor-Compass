@@ -125,9 +125,16 @@ export const REGISTRY: RegistryRepo[] = [
   // Bioinformatics
   repo("biopython/biopython", "Python", ["bioinformatics", "biology", "science", "genetics"], "Tools for biological computation and molecular biology."),
 
-  // Security & Networking
-  repo("mitmproxy/mitmproxy", "Python", ["security", "networking", "devtools", "cli"], "Interactive TLS-capable intercepting HTTP proxy."),
-  repo("OWASP/CheatSheetSeries", "Markdown", ["security", "docs", "web", "education"], "Practical security guidance for developers."),
+  // Security, Cryptography & Compression
+  repo("pyca/cryptography", "Python", ["cryptography", "security", "cybersecurity", "encryption", "c"], "Cryptographic recipes and primitives for Python with C bindings."),
+  repo("facebook/zstd", "C", ["compression", "algorithm", "c", "systems"], "Fast lossless compression algorithm by Meta."),
+  repo("lz4/lz4", "C", ["compression", "algorithm", "c", "fast"], "Extremely fast compression algorithm."),
+  repo("openssl/openssl", "C", ["cryptography", "security", "cybersecurity", "tls", "c", "ssl"], "TLS/SSL and crypto library."),
+  repo("certbot/certbot", "Python", ["security", "cybersecurity", "cryptography", "tls", "cli"], "EFF's automated TLS certificate tool."),
+  repo("paramiko/paramiko", "Python", ["security", "cybersecurity", "ssh", "cryptography", "networking"], "Python SSHv2 protocol library."),
+  repo("google/brotli", "C", ["compression", "web", "algorithm"], "Generic-purpose lossless compression algorithm."),
+  repo("mitmproxy/mitmproxy", "Python", ["security", "cybersecurity", "networking", "devtools", "cli"], "Interactive TLS-capable intercepting HTTP proxy."),
+  repo("OWASP/CheatSheetSeries", "Markdown", ["security", "cybersecurity", "docs", "web", "education"], "Practical security guidance for developers."),
 
   // Compilers & Systems
   repo("ziglang/zig", "Zig", ["compiler", "systems", "language"], "General-purpose programming language and toolchain."),

@@ -35,6 +35,7 @@ export function CandidateCard({
   const hasNewContributorGuide = candidate.signals?.hasNewContributorGuide;
 
   const [status, setStatus] = useState<"solved" | "pr_created" | "merged" | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     try {
@@ -44,10 +45,49 @@ export function CandidateCard({
         const item = hist.find((h) => h.repo === candidate.repo && h.number === candidate.number);
         if (item) setStatus(item.status);
       }
+
+      const rawSaved = localStorage.getItem("compass.saved_issues");
+      if (rawSaved) {
+        const savedList = JSON.parse(rawSaved) as { repo: string; number: number }[];
+        setIsSaved(savedList.some((s) => s.repo === candidate.repo && s.number === candidate.number));
+      }
     } catch {
       // ignore
     }
   }, [candidate.repo, candidate.number]);
+
+  function toggleSave() {
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+    try {
+      const raw = localStorage.getItem("compass.saved_issues");
+      interface SavedItem {
+        repo: string;
+        number: number;
+        title: string;
+        url: string;
+        candidate: RankedCandidate;
+        savedAt: string;
+      }
+      let list: SavedItem[] = raw ? JSON.parse(raw) : [];
+      list = list.filter((i) => !(i.repo === candidate.repo && i.number === candidate.number));
+
+      if (nextSaved) {
+        list.push({
+          repo: candidate.repo,
+          number: candidate.number,
+          title: candidate.title,
+          url: candidate.url,
+          candidate,
+          savedAt: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem("compass.saved_issues", JSON.stringify(list));
+      window.dispatchEvent(new Event("storage"));
+    } catch {
+      // ignore
+    }
+  }
 
   function toggleStatus(nextStatus: "solved" | "pr_created" | "merged") {
     const next = status === nextStatus ? null : nextStatus;
@@ -69,6 +109,7 @@ export function CandidateCard({
         });
       }
       localStorage.setItem("compass.history", JSON.stringify(list));
+      window.dispatchEvent(new Event("storage"));
     } catch {
       // ignore
     }
@@ -128,13 +169,22 @@ export function CandidateCard({
       )}
 
       <div className="card-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <button type="button" className="btn btn-primary" onClick={() => onSelect(candidate)}>
             {featured ? "Start here" : "Get the guide"}
           </button>
           <a className="btn btn-ghost" href={candidate.url} target="_blank" rel="noreferrer">
             View on GitHub ↗
           </a>
+          <button
+            type="button"
+            className={`btn ${isSaved ? "btn-primary" : "btn-ghost"}`}
+            style={{ fontSize: "0.8rem", padding: "5px 10px" }}
+            onClick={toggleSave}
+            title={isSaved ? "Remove from saved issues" : "Save issue for later"}
+          >
+            {isSaved ? "★ Saved" : "☆ Save"}
+          </button>
         </div>
 
         {/* Contribution Tracking Actions */}

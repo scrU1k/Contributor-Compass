@@ -15,6 +15,24 @@ interface ScoutInfo {
   repos: { fullName: string; why: string }[];
 }
 
+interface PriorSearch {
+  id: string;
+  timestamp: string;
+  summary: string;
+  profile: Profile;
+  results: RankedCandidate[];
+  scout: ScoutInfo | null;
+}
+
+interface SavedIssue {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  candidate: RankedCandidate;
+  savedAt: string;
+}
+
 function summary(profile: Profile): string {
   const interests = profile.interests.join(", ") || "no interests";
   const stack = profile.stack.map((s) => s.tech).join(", ") || "no stack";
@@ -30,6 +48,11 @@ export default function ResultsPage() {
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasKeys, setHasKeys] = useState(true);
+
+  // Prior searches & Saved issues states
+  const [priorSearches, setPriorSearches] = useState<PriorSearch[]>([]);
+  const [savedIssues, setSavedIssues] = useState<SavedIssue[]>([]);
+  const [activePanel, setActivePanel] = useState<"none" | "prior" | "saved">("none");
 
   const fetchIssues = useCallback(async (parsedProfile: Profile) => {
     try {
@@ -58,6 +81,27 @@ export default function ResultsPage() {
       if (fetchedScout) {
         sessionStorage.setItem("compass.scout", JSON.stringify(fetchedScout));
       }
+
+      // Save search snapshot to localStorage for prior results recall
+      try {
+        const pRaw = localStorage.getItem("compass.prior_searches");
+        let priors: PriorSearch[] = pRaw ? JSON.parse(pRaw) : [];
+        const summ = summary(parsedProfile);
+        priors = priors.filter((p) => p.summary !== summ);
+        priors.unshift({
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          summary: summ,
+          profile: parsedProfile,
+          results: fetchedResults,
+          scout: fetchedScout,
+        });
+        priors = priors.slice(0, 10);
+        localStorage.setItem("compass.prior_searches", JSON.stringify(priors));
+        setPriorSearches(priors);
+      } catch {
+        // ignore
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -82,6 +126,30 @@ export default function ResultsPage() {
     setProfile(parsed);
     setHasKeys(Boolean(loadSettings().llmApiKey.trim() || loadSettings().githubToken.trim()));
 
+    // Load stored prior searches & saved issues
+    const syncLocalStorage = () => {
+      try {
+        const pRaw = localStorage.getItem("compass.prior_searches");
+        if (pRaw) setPriorSearches(JSON.parse(pRaw));
+        const sRaw = localStorage.getItem("compass.saved_issues");
+        if (sRaw) setSavedIssues(JSON.parse(sRaw));
+      } catch {
+        // ignore
+      }
+    };
+    syncLocalStorage();
+
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("tab") === "saved") {
+        setActivePanel("saved");
+      } else if (urlParams.get("tab") === "prior") {
+        setActivePanel("prior");
+      }
+    }
+
+    window.addEventListener("storage", syncLocalStorage);
+
     // Check if we already have cached search results in sessionStorage
     const cachedResultsRaw = sessionStorage.getItem("compass.results");
     const cachedScoutRaw = sessionStorage.getItem("compass.scout");
@@ -92,7 +160,7 @@ export default function ResultsPage() {
         const cachedScout = cachedScoutRaw ? (JSON.parse(cachedScoutRaw) as ScoutInfo) : null;
         setResults(cachedResults);
         setScout(cachedScout);
-        return;
+        return () => window.removeEventListener("storage", syncLocalStorage);
       } catch {
         // Corrupt cache: fall through to network fetch
       }
@@ -100,6 +168,7 @@ export default function ResultsPage() {
 
     // No cache: perform initial search
     void fetchIssues(parsed);
+    return () => window.removeEventListener("storage", syncLocalStorage);
   }, [router, fetchIssues]);
 
   function handleRefresh() {
@@ -108,6 +177,38 @@ export default function ResultsPage() {
     sessionStorage.removeItem("compass.scout");
     setResults(null);
     void fetchIssues(profile);
+  }
+
+  function restoreSearch(ps: PriorSearch) {
+    setProfile(ps.profile);
+    setResults(ps.results);
+    setScout(ps.scout);
+    sessionStorage.setItem("compass.profile", JSON.stringify(ps.profile));
+    sessionStorage.setItem("compass.results", JSON.stringify(ps.results));
+    if (ps.scout) {
+      sessionStorage.setItem("compass.scout", JSON.stringify(ps.scout));
+    } else {
+      sessionStorage.removeItem("compass.scout");
+    }
+    setActivePanel("none");
+  }
+
+  function removePriorSearch(id: string) {
+    const updated = priorSearches.filter((p) => p.id !== id);
+    setPriorSearches(updated);
+    localStorage.setItem("compass.prior_searches", JSON.stringify(updated));
+  }
+
+  function clearPriorSearches() {
+    setPriorSearches([]);
+    localStorage.removeItem("compass.prior_searches");
+  }
+
+  function removeSavedIssue(repo: string, number: number) {
+    const updated = savedIssues.filter((s) => !(s.repo === repo && s.number === number));
+    setSavedIssues(updated);
+    localStorage.setItem("compass.saved_issues", JSON.stringify(updated));
+    window.dispatchEvent(new Event("storage"));
   }
 
   function open(candidate: RankedCandidate) {
@@ -126,7 +227,25 @@ export default function ResultsPage() {
             <h1>{newcomer ? "Your first PR plan" : "Issues worth your time"}</h1>
             {profile && <p className="subtle">{summary(profile)}</p>}
           </div>
-          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className={`btn ${activePanel === "prior" ? "btn-primary" : "btn-ghost"}`}
+              style={{ padding: "6px 12px", fontSize: "0.82rem" }}
+              onClick={() => setActivePanel(activePanel === "prior" ? "none" : "prior")}
+              title="View and restore issues from previous search runs"
+            >
+              📂 Prior Results {priorSearches.length > 0 && `(${priorSearches.length})`}
+            </button>
+            <button
+              type="button"
+              className={`btn ${activePanel === "saved" ? "btn-primary" : "btn-ghost"}`}
+              style={{ padding: "6px 12px", fontSize: "0.82rem" }}
+              onClick={() => setActivePanel(activePanel === "saved" ? "none" : "saved")}
+              title="View your saved/bookmarked issues"
+            >
+              ★ Saved {savedIssues.length > 0 && `(${savedIssues.length})`}
+            </button>
             <button
               type="button"
               className="btn btn-ghost"
@@ -141,6 +260,205 @@ export default function ResultsPage() {
             </Link>
           </div>
         </div>
+
+        {/* Prior Searches Drawer / Modal */}
+        {activePanel === "prior" && (
+          <div
+            className="panel"
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--accent)",
+              borderRadius: "10px",
+              padding: "1.25rem",
+              marginBottom: "1.5rem",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "8px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.1rem" }}>📂 Previous Search Results</h3>
+                <p className="subtle" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>
+                  Restore results from your earlier discovery runs without querying again.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {priorSearches.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: "0.76rem", padding: "4px 10px" }}
+                    onClick={clearPriorSearches}
+                  >
+                    Clear history
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: "0.76rem", padding: "4px 10px" }}
+                  onClick={() => setActivePanel("none")}
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+
+            {priorSearches.length === 0 ? (
+              <p className="subtle" style={{ margin: "1rem 0" }}>
+                No prior searches recorded yet. Every time you search for issues, your results are saved here.
+              </p>
+            ) : (
+              <div style={{ display: "grid", gap: "10px" }}>
+                {priorSearches.map((ps) => (
+                  <div
+                    key={ps.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "12px 14px",
+                      background: "var(--bg)",
+                      border: "1px solid var(--line)",
+                      borderRadius: "8px",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>{ps.summary}</div>
+                      <div className="subtle" style={{ fontSize: "0.75rem", marginTop: "2px" }}>
+                        {new Date(ps.timestamp).toLocaleString()} · {ps.results.length} verified issue{ps.results.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ fontSize: "0.78rem", padding: "5px 12px" }}
+                        onClick={() => restoreSearch(ps)}
+                      >
+                        Restore Results ➔
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ fontSize: "0.75rem", padding: "5px 8px" }}
+                        onClick={() => removePriorSearch(ps.id)}
+                        title="Delete snapshot"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Saved Issues Drawer / Modal */}
+        {activePanel === "saved" && (
+          <div
+            className="panel"
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--accent)",
+              borderRadius: "10px",
+              padding: "1.25rem",
+              marginBottom: "1.5rem",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "8px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.1rem" }}>★ Saved Issues for Later</h3>
+                <p className="subtle" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>
+                  Issues you bookmarked to solve or contribute to later.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: "0.76rem", padding: "4px 10px" }}
+                onClick={() => setActivePanel("none")}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {savedIssues.length === 0 ? (
+              <p className="subtle" style={{ margin: "1rem 0" }}>
+                No issues saved yet. Click &ldquo;☆ Save&rdquo; on any issue card or guide page to bookmark it.
+              </p>
+            ) : (
+              <div style={{ display: "grid", gap: "10px" }}>
+                {savedIssues.map((item) => (
+                  <div
+                    key={`${item.repo}#${item.number}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "12px 14px",
+                      background: "var(--bg)",
+                      border: "1px solid var(--line)",
+                      borderRadius: "8px",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: "260px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ color: "var(--accent)", fontSize: "0.84rem", fontWeight: 600 }}>
+                          {item.repo} #{item.number}
+                        </span>
+                        {item.candidate?.score?.total && (
+                          <span className="badge neutral" style={{ fontSize: "0.7rem", padding: "0.1rem 0.4rem" }}>
+                            {item.candidate.score.total.toFixed(0)}/100
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: "0.9rem", marginTop: "3px" }}>
+                        {item.title}
+                      </div>
+                      <div className="subtle" style={{ fontSize: "0.73rem", marginTop: "2px" }}>
+                        Saved on {new Date(item.savedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ fontSize: "0.78rem", padding: "5px 12px" }}
+                        onClick={() => open(item.candidate)}
+                      >
+                        Get the guide ➔
+                      </button>
+                      <a
+                        className="btn btn-ghost"
+                        style={{ fontSize: "0.78rem", padding: "5px 10px" }}
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        GitHub ↗
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ fontSize: "0.75rem", padding: "5px 8px" }}
+                        onClick={() => removeSavedIssue(item.repo, item.number)}
+                        title="Remove bookmark"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {!hasKeys && (
           <div

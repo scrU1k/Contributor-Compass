@@ -32,19 +32,29 @@ const ISSUES_PER_REPO = 6;
 const LIVE_SEARCH_REPOS = 3;
 
 function liveDiscoveryQueries(profile: Profile): string[] {
-  const language = profile.stack[0]?.tech.replace(/[^a-zA-Z0-9+#.-]/g, "");
-  const broad = `is:issue is:open no:assignee label:"good first issue","help wanted",beginner${language ? ` language:${language}` : ""}`;
-  const term = (profile.interests[0] || profile.stack[0]?.tech || "").replace(/[^a-zA-Z0-9+#.-]/g, " ").trim();
-  const focused = term && !/^not sure(?: open to anything)?$/i.test(term)
-    ? `is:issue is:open no:assignee "${term}"${language ? ` language:${language}` : ""}`
-    : "";
-  return [...new Set([broad, focused].filter(Boolean))].slice(0, 2);
+  const languages = profile.stack.map((s) => s.tech.replace(/[^a-zA-Z0-9+#.-]/g, "")).filter(Boolean);
+  const langQuery = languages.length > 0 ? ` language:${languages[0]}` : "";
+  const queries: string[] = [];
+
+  const validInterests = profile.interests
+    .map((i) => i.replace(/[^a-zA-Z0-9+#.-]/g, " ").trim())
+    .filter((i) => i && !/^not sure(?: open to anything)?$/i.test(i))
+    .slice(0, 3);
+
+  for (const term of validInterests) {
+    queries.push(`is:issue is:open no:assignee "${term}"${langQuery}`);
+  }
+
+  if (queries.length === 0) {
+    queries.push(`is:issue is:open no:assignee label:"good first issue","help wanted",beginner${langQuery}`);
+  }
+
+  return [...new Set(queries)].slice(0, 3);
 }
 
 async function discoverOutsideRegistry(profile: Profile, knownRepos: Set<string>): Promise<IssueCandidate[]> {
   const queries = liveDiscoveryQueries(profile);
-  // Unauthenticated GitHub search is rate-limited to 10 req/min. If no token, run only the single most focused query.
-  const queriesToRun = env.githubToken() ? queries : queries.slice(-1);
+  const queriesToRun = env.githubToken() ? queries : queries.slice(0, 2);
 
   const hits: GhIssue[] = [];
   for (const query of queriesToRun) {

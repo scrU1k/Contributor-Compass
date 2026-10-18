@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "../components/SiteHeader";
 import {
@@ -36,6 +37,7 @@ function describeGithub(health: Health): string {
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -86,6 +88,26 @@ export default function SettingsPage() {
     <>
       <SiteHeader />
       <main className="container narrow">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem", marginTop: "0.5rem" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", padding: "6px 14px" }}
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/results");
+              }
+            }}
+          >
+            ← Back to Previous Page
+          </button>
+          <Link href="/results" className="subtle" style={{ fontSize: "0.82rem" }}>
+            Return to Results ➔
+          </Link>
+        </div>
+
         <section className="hero" style={{ paddingBottom: "1.5rem" }}>
           <p className="eyebrow">Setup</p>
           <h1>Bring your own keys.</h1>

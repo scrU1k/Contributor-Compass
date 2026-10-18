@@ -47,6 +47,11 @@ const ALIASES: Record<string, string[]> = {
   ui: ["design", "frontend"],
   ux: ["design", "frontend"],
   accessibility: ["design", "a11y"],
+  cryptography: ["crypto", "security", "cybersecurity", "encryption", "tls", "ssl"],
+  compression: ["zstd", "lz4", "brotli", "gzip", "archive", "algorithm"],
+  cybersecurity: ["security", "cryptography", "infosec", "vulnerability"],
+  security: ["cybersecurity", "cryptography", "tls"],
+  astronomy: ["space", "astrophysics", "solar", "science"],
 };
 
 const scoutSchema = z.object({
@@ -77,34 +82,59 @@ function wantedTerms(profile: Profile): string[] {
   return [...terms];
 }
 
-/** Deterministic relevance: language first, then topic overlap. */
+/** Deterministic relevance: strictly prioritizes interest overlap over generic language matches. */
 export function registryScore(profile: Profile, repo: RegistryRepo): number {
   const terms = wantedTerms(profile);
-  let score = 0;
+  let topicScore = 0;
+  let hasInterestMatch = false;
 
-  if (terms.includes(repo.language.toLowerCase())) score += 4;
+  const validInterests = profile.interests
+    .map((i) => i.toLowerCase().trim())
+    .filter((i) => i && !/^not sure(?: open to anything)?$/i.test(i));
 
-  for (const topic of repo.topics) {
+  const repoTopics = repo.topics.map((t) => t.toLowerCase());
+
+  for (const topic of repoTopics) {
     for (const term of terms) {
-      if (topic === term) score += 3;
-      else if (topic.includes(term) || term.includes(topic)) score += 1;
+      if (topic === term) {
+        topicScore += 8;
+        if (validInterests.includes(term) || validInterests.some((vi) => (ALIASES[vi] ?? []).includes(topic))) {
+          hasInterestMatch = true;
+        }
+      } else if (topic.includes(term) || term.includes(topic)) {
+        topicScore += 3;
+        if (validInterests.some((vi) => topic.includes(vi) || vi.includes(topic))) {
+          hasInterestMatch = true;
+        }
+      }
     }
   }
 
-  // A docs-heavy contribution profile should see docs-heavy projects.
-  if (profile.contributionTypes.includes("docs") && repo.topics.includes("docs")) {
-    score += 2;
+  // If the user specified explicit interests, repos with 0 interest match must NOT crowd out relevant repos!
+  if (validInterests.length > 0 && !hasInterestMatch) {
+    return 0;
   }
 
-  return score;
+  const langMatch = terms.includes(repo.language.toLowerCase());
+  if (profile.contributionTypes.includes("docs") && repoTopics.includes("docs")) {
+    topicScore += 2;
+  }
+
+  return topicScore + (langMatch ? 4 : 0);
 }
 
 export function scoutDeterministic(profile: Profile, limit = 5): ScoutResult {
+  const validInterests = profile.interests
+    .map((i) => i.toLowerCase().trim())
+    .filter((i) => i && !/^not sure(?: open to anything)?$/i.test(i));
+
   const ranked = REGISTRY.map((repo, index) => ({
     repo,
     index,
     score: registryScore(profile, repo),
-  })).sort((a, b) => b.score - a.score || a.index - b.index);
+  }))
+    .filter((r) => validInterests.length === 0 || r.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
 
   return {
     repos: ranked.slice(0, limit).map(({ repo }) => ({
