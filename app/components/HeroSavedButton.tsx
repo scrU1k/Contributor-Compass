@@ -87,7 +87,7 @@ export function HeroSavedButton() {
   }
 
   return (
-    <div style={{ position: "relative", display: "inline-block", marginTop: "0.85rem" }}>
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", margin: 0 }}>
       <button
         type="button"
         className="btn btn-ghost"
@@ -102,7 +102,11 @@ export function HeroSavedButton() {
           display: "inline-flex",
           alignItems: "center",
           gap: "6px",
+          height: "36px",
+          boxSizing: "border-box",
+          lineHeight: 1,
           fontSize: "0.84rem",
+          fontWeight: 600,
           padding: "6px 14px",
           borderRadius: "8px",
           border: "1px solid var(--line)",

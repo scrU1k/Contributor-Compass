@@ -10,14 +10,14 @@ export default function HomePage() {
       <SiteHeader />
       <main className="container narrow">
         <section className="hero">
-          <p className="eyebrow">Hacktoberfest Hack Day</p>
+          <p className="eyebrow">Open Source For All</p>
           <h1>Find an issue you can actually land.</h1>
           <p className="lede">
             Most &ldquo;good first issue&rdquo; lists are static and stale. We check that the issue
             is still open, unassigned, and in a project that actually merges work from outsiders —
             then we write you a way in.
           </p>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "0.85rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "1rem" }}>
             <Link
               href="/verify"
               className="btn btn-ghost"
@@ -25,6 +25,9 @@ export default function HomePage() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "7px",
+                height: "36px",
+                boxSizing: "border-box",
+                lineHeight: 1,
                 fontSize: "0.84rem",
                 padding: "6px 14px",
                 borderRadius: "8px",
@@ -33,6 +36,7 @@ export default function HomePage() {
                 background: "rgba(59, 130, 246, 0.08)",
                 fontWeight: 600,
                 textDecoration: "none",
+                margin: 0,
               }}
               title="Verify issues directly from any GitHub issue, repo, or organization link"
             >
