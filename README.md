@@ -4,11 +4,11 @@
 > Existing discovery tools hand developers a static list of `good first issue` tags. **Contributor Compass** transforms a developer's skills and goals into a **live-verified, ready-to-work path into open source** — with checkable evidence for every claim.
 
 [![Gemma 4](https://img.shields.io/badge/Gemma%204-Google%20AI%20Studio-8E75B2?style=flat-square&logo=google)](https://aistudio.google.com/)
-[![Jev System-1](https://img.shields.io/badge/Decision%20Harness-Jev%20System--1-4285F4?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/core/verify/jev.ts)
-[![Open Source Guide](https://img.shields.io/badge/Open%20Source-Grounded%20Onboarding-34A853?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/core/guide/guide.ts)
+[![Jev System-1](https://img.shields.io/badge/Decision%20Harness-Jev%20System--1-4285F4?style=flat-square)](core/verify/jev.ts)
+[![Open Source Guide](https://img.shields.io/badge/Open%20Source-Grounded%20Onboarding-34A853?style=flat-square)](core/guide/guide.ts)
 [![Hacktoberfest](https://img.shields.io/badge/Hacktoberfest-2026-FF7518?style=flat-square)](https://hacktoberfest.com/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/LICENSE)
-[![BYOK Privacy](https://img.shields.io/badge/BYOK%20Privacy-Zero%20Required%20Keys-00C853?style=flat-square)](file:///c:/Users/niger/Documents/Contributor%20Compass/.env.example)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+[![BYOK Privacy](https://img.shields.io/badge/BYOK%20Privacy-Zero%20Required%20Keys-00C853?style=flat-square)](.env.example)
 
 ---
 
@@ -20,7 +20,7 @@ Contributor Compass runs **completely out-of-the-box**. No database to install, 
 # 1. Install dependencies
 npm install
 
-# 2. Run the automated test suite (16 tests, pure deterministic assertions)
+# 2. Run the automated test suite (17 tests, pure deterministic assertions)
 npm test
 
 # 3. Launch the Terminal Edition (CLI)
@@ -35,7 +35,7 @@ npm run dev
 ```
 
 > **Optional Bring-Your-Own-Key (BYOK):**  
-> To test live Gemma 4 semantic checks and AI guide generation, paste your [Google AI Studio API Key](https://aistudio.google.com/apikey) and GitHub Token into **`/settings`** (Web UI) or add them to `.env`. Credentials stay in request-scoped memory (`AsyncLocalStorage`) and are never written to disk or logged.
+> To test live Gemma 4 semantic checks and AI guide generation, enter your [Google AI Studio API Key](https://aistudio.google.com/apikey) and GitHub Token in **`/settings`** (Web UI) or add them to `.env` (CLI). In the Web UI, keys are stored in the browser's `localStorage` and transmitted per-request via headers; the Node.js server scopes them strictly to that request via `AsyncLocalStorage` and never persists them to server disks, databases, or logs.
 
 ---
 
@@ -72,30 +72,31 @@ Rather than treating the LLM as a superficial text chatbot ("thin wrapper"), Con
   │ • Thinking suppression          │                             │ • File citations extracted      │
   │ • Single-token ASCII codes      │                             │ • filterExistingPaths() checks  │
   │ • Sequential logprob cursor     │                             │   real Git tree — drops false   │
-  │ • Output: Calibrated decisions  │                             │   hallucinated files            │
+  │ • Output: Advisory triage checks│                             │   hallucinated files            │
   └─────────────────────────────────┘                             └─────────────────────────────────┘
 ```
 
 ### 1. System 1: The Gemma 4 Jev Decision Harness (`core/verify/jev.ts`)
-In open-source triage, evaluations must be **deterministic, reproducible, and free of conversational drift**. We emulated the **TypeSafe Jev System-1 decision model** over hosted Gemma 4:
-- **Thinking Suppression & Greedy Decoding:** Temperature is locked to `0.0` with rigid single-letter JSON constraints (`{"q1": "A", "q2": "B"}`).
-- **Single-Token ASCII Mapping:** Criteria are mapped to single ASCII tokens (`A`, `B`, `C`...), completely eliminating prefix-tree dispersion.
-- **Sequential Logprob Cursor Calibration:** Standard LLM calls evaluate questions in one batch, which causes global search logprobs to cross-contaminate between questions. Jev uses a **sequential token cursor** with temperature-scaled softmax ($T = 1.4$) to compute true independent confidence.
-- **Argmax Resilience Fallback:** If an OpenAI-compatible endpoint omits logprobs, Jev automatically falls back to deterministic argmax token attribution ($P = 0.85$ chosen) so semantic checks never fail.
+In open-source triage, evaluations must be **deterministic, reproducible, and free of conversational drift**. We implemented a structured **System-1 decision harness** over hosted Gemma 4 (`gemma-4-31b-it`):
+- **Thinking Suppression & Greedy Decoding:** Temperature is locked to `0.0` with rigid single-letter JSON constraints (`{"q1": "A", "q2": "B"}`) to prevent conversational drift.
+- **Single-Token ASCII Mapping:** Evaluation criteria map to single ASCII tokens (`A`, `B`, `C`...), eliminating multi-token prefix dispersion.
+- **Sequential Token Cursor:** Isolates evaluation steps across multiple questions to prevent cross-question attribution bleed.
+- **Advisory Decision Output:** When hosted endpoints omit token logprobs, the harness attributes greedy argmax token selection ($P = 0.85$ baseline). These scores serve as **advisory triage signals** (heuristics) rather than empirical statistical probabilities.
 - **Core Decision Primitives Evaluated:**
   - `beginner_friendly`: Binary noul evaluation of newcomer accessibility.
   - `scope_trap`: Detects architectural overhauls disguised as simple issues.
   - `needs_maintainer_triage`: Detects whether maintainers must resolve ambiguity before coding.
-  - `quote`: Extracts a verbatim substring from the issue body as grounded proof.
+  - `quote`: Extracts a verbatim substring from the issue body as checkable proof.
 
 ### 2. System 2: Grounded Onboarding Copilot (`core/guide/guide.ts`)
 Once an issue passes verification, Gemma 4 synthesizes a step-by-step contribution path:
-- **Git Tree Path Verification (`filterExistingPaths`):** The LLM's suggested file citations are cross-checked live against the repository's real git tree. Any hallucinated file path is automatically dropped before the guide is presented to the user.
-- **Safe Resource Protocol Enforcement (`isSafeHttpUrl`):** All external links recommended by Gemma 4 are validated to prevent `javascript:` or `data:` URL injections.
+- **Git Tree Path Verification (`filterExistingPaths`):** File citations suggested by the LLM are checked against the repository's real git tree (`core/github/signals.ts`). Any non-existent file path is dropped before the guide is displayed.
+- **Safe Resource Protocol Enforcement (`isSafeHttpUrl`):** All external links recommended by Gemma 4 are validated to allow only `http:` and `https:`, blocking `javascript:` or `data:` injections.
 
-### 3. Gemma 4 Repo Scout (`core/scout/scout.ts`) & Intent Parser (`cli.ts`)
+### 3. Gemma 4 Repo Scout (`core/scout/scout.ts`) & Bounded Discovery (`core/github/org.ts`)
 - **Intelligent Repo Scouting:** Matches developer fluency, interests, and stated fears against the curated open-source catalogue using schema-enforced JSON.
-- **Natural Language CLI:** Translates free-form developer goals into structured profile constraints.
+- **Budgeted Organization Scan:** Evaluates up to 100 recently active public repositories in an organization, selects up to 5 candidate repos matching the developer's stack, and inspects verified starter issues.
+- **Natural Language CLI (`cli.ts`):** Translates free-form developer goals into structured profile constraints.
 
 ### 4. Interactive "Ask Gemma" Assistant (`app/api/guide/ask/route.ts`)
 Contributors stuck on an issue can ask targeted questions ("How do I reproduce this?", "Where are the unit tests located?") and receive grounded answers attuned to the exact issue body, labels, and repository signals.
@@ -147,68 +148,70 @@ Contributor Compass provides a clean, responsive, and developer-first web interf
 7. **Personal Contribution Tracker:**
    - Mark issues as "Done / Fixed", "PR Opened", or "Merged", tracking your open-source journey in real time with an automated header badge counter.
 
-## 🔬 How Real Signals Are Verified (No Hallucinations)
+## 🔬 Ground-Truth Verification & Deterministic Signals
 
-Contributor Compass doesn't guess; it extracts live data using GitHub's Core REST API:
+Contributor Compass does not rely on subjective label claims alone; it cross-references candidate issues against GitHub's Core REST API and repository Git trees:
 
 ```
-Candidate Issue ──► LIVENESS CHECK ──► COMPETITION CHECK ──► JEV SEMANTIC CHECK ──► READINESS SCORE
+Candidate Issue ──► LIVENESS CHECK ──► COMPETITION CHECK ──► JEV ADVISORY CHECK ──► READINESS SCORE
                      • pushed_at        • pulls referencing   • Gemma 4 System-1    • 6 weighted
-                     • 90d human PRs      #123 in title/body    scope trap check      dimensions
+                     • 90d human PRs      #123 in title/body    scope trap heuristic  dimensions
                      • bot PR exclusion
 ```
 
 ### Is the "Ghost Town Effect" Really Checked?
-**Yes, 100% verified live in code.**
-In [`core/github/signals.ts`](file:///c:/Users/niger/Documents/Contributor%20Compass/core/github/signals.ts):
+**Yes, verified directly against GitHub's closed PR history.**
+In [`core/github/signals.ts`](core/github/signals.ts):
 1. We query `/repos/:owner/:repo/pulls?state=closed&per_page=100`.
 2. We filter for `merged_at >= Date.now() - 90 days`.
 3. We **strictly exclude bot accounts** (`user.type === "Bot"`, `[bot]` usernames, Dependabot, Renovate).
-4. We verify `author_association` to count only genuine community outsiders (excluding core owners and members).
+4. We verify `author_association` to count only genuine community outsiders (excluding core repository owners and members).
 5. We calculate the median maintainer turnaround response time in hours.
-6. In [`core/score/readiness.ts`](file:///c:/Users/niger/Documents/Contributor%20Compass/core/score/readiness.ts), the **Liveness score** directly penalizes projects with zero outside merges:
+6. In [`core/score/readiness.ts`](core/score/readiness.ts), the **Liveness score** directly penalizes projects with zero outside merges:
    $$\text{Liveness} = 0.5 \times e^{-\frac{\text{daysSincePushed}}{60}} + 0.5 \times \min\left(1.0, \frac{\text{mergesFromOutsiders90d}}{10}\right)$$
 
 ### Is Competition Checked?
-**Yes.** We fetch open pull requests across the repository and scan titles and bodies for references matching `#<issueNumber>` or `GH-<issueNumber>`. If open competing PRs exist, the competition sub-score drops, and the UI flags the conflict.
+**Yes.** In [`core/github/issues.ts`](core/github/issues.ts), we fetch open pull requests across the repository and scan titles and bodies for references matching `#<issueNumber>`, `GH-<issueNumber>`, or `owner/repo#<issueNumber>`. If open competing PRs exist, the competition sub-score drops, and the UI flags the conflict.
 
 ---
 
-## 🧪 Real Automated Test Suite (Not 'Trust Me Bro')
+## 🧪 Automated Unit Test Suite
 
-The test battery in [`core/**/*.test.ts`](file:///c:/Users/niger/Documents/Contributor%20Compass/package.json#L12) consists of **16 pure, deterministic unit tests** executed in ~260ms via Node's native test runner (`npm test`):
+The test battery in [`core/**/*.test.ts`](package.json) consists of **17 deterministic unit tests** executed via Node's native test runner (`npm test`):
 
 ```bash
 npm test
 ```
 
 ```
-✔ isNotReadyLabel matches triage and blocker variants (1.0ms)
-✔ isNotReadyLabel does NOT block question, stale, or beginner-friendly labels (0.2ms)
-✔ isPromising rejects stale, crowded, or assigned issues (1.3ms)
-✔ fitsHardConstraints enforces time budget, effort, and repo constraints (0.5ms)
-✔ parseGitHubTarget parses issue URLs (0.8ms)
-✔ parseGitHubTarget parses repository URLs and short identifiers (0.2ms)
-✔ parseGitHubTarget parses organization and owner targets (0.1ms)
-✔ parseGitHubTarget returns null for invalid input (0.1ms)
-✔ isSafeHttpUrl allows http and https URLs (0.5ms)
-✔ isSafeHttpUrl blocks javascript, data, file, and malformed URLs (0.1ms)
-✔ daysSince computes positive day difference (1.0ms)
-✔ tagOverlap handles language and topic matching (0.4ms)
-✔ scoreCandidate produces balanced total score between 0 and 100 (0.6ms)
-✔ scoreCandidate applies maintainer triage penalty when Jev flags unready issue (0.4ms)
-✔ GemmaJevHarness sequential cursor separates multiple questions (1.0ms)
-✔ GemmaJevHarness falls back to greedy argmax when logprobs are absent (0.1ms)
+✔ isNotReadyLabel matches triage and blocker variants
+✔ isNotReadyLabel does NOT block question, stale, or beginner-friendly labels
+✔ isPromising rejects stale, crowded, or assigned issues
+✔ fitsHardConstraints enforces time budget, effort, and repo constraints
+✔ countPRsReferencing identifies exact issue references and variants
+✔ parseGitHubTarget parses issue URLs
+✔ parseGitHubTarget parses repository URLs and short identifiers
+✔ parseGitHubTarget parses organization and owner targets
+✔ parseGitHubTarget returns null for invalid input
+✔ isSafeHttpUrl allows http and https URLs
+✔ isSafeHttpUrl blocks javascript, data, file, and malformed URLs
+✔ daysSince computes positive day difference
+✔ tagOverlap handles language and topic matching
+✔ scoreCandidate produces balanced total score between 0 and 100
+✔ scoreCandidate applies maintainer triage penalty when Jev flags unready issue
+✔ GemmaJevHarness sequential cursor separates multiple questions
+✔ GemmaJevHarness falls back to greedy argmax when logprobs are absent
 
-ℹ tests 16 | pass 16 | fail 0 | duration 261ms
+ℹ tests 17 | pass 17 | fail 0
 ```
 
 ### What These Tests Actually Prove:
 1. **Maintainer Regex Safety:** Proves `isNotReadyLabel` matches 15+ real-world triage variants (`needs: triage`, `status: awaiting triage`, `waiting for maintainer`) without accidentally killing valid `question` or `good first issue` tags.
 2. **Quality Gate Integrity:** Proves `isPromising` drops stale issues (>240d), crowded threads (>25 comments), and assigned issues.
-3. **Logprob Cross-Contamination Fix:** Proves the sequential cursor isolates logits between question 1 and question 2 in `GemmaJevHarness`.
-4. **XSS & Injection Defense:** Proves `isSafeHttpUrl` rejects `javascript:`, `data:`, and local file URIs.
-5. **Score Penalization:** Proves that when Jev flags `NEEDS_TRIAGE` or a scope trap, the Contribution Readiness Score mathematically drops.
+3. **PR Reference Extraction:** Proves `countPRsReferencing` captures exact references (`#123`, `GH-123`, `owner/repo#123`) without falsely matching `#1234`.
+4. **Logprob Cross-Contamination Guard:** Proves the sequential cursor isolates attribution steps between question 1 and question 2 in `GemmaJevHarness`.
+5. **XSS & Injection Defense:** Proves `isSafeHttpUrl` rejects `javascript:`, `data:`, and local file URIs.
+6. **Score Penalization:** Proves that when Jev flags `NEEDS_TRIAGE` or a scope trap, the Contribution Readiness Score mathematically drops.
 
 ---
 
@@ -259,9 +262,9 @@ Enter an issue number (1) to generate a step-by-step guide, or press [Enter] to 
 
 ---
 
-## 🚀 Scalability: What Changes at 100x Scale?
+## 🚀 Scalability: Planned 100x Growth Architecture (Proposed)
 
-If Contributor Compass scaled to **100,000+ daily developers across millions of GitHub repositories**, the architecture evolves from a local read-through cache to a distributed event-driven platform:
+*The current release is an in-process system with disk caching and in-flight deduplication. Below is the proposed design for scaling to 100,000+ daily developers across millions of GitHub repositories:*
 
 ```
 [GitHub Event Stream] ──► [Webhook Ingestion Worker] ──► [BullMQ / Redis] ──► [PostgreSQL + pgvector]
@@ -273,23 +276,23 @@ If Contributor Compass scaled to **100,000+ daily developers across millions of 
 ```
 
 1. **Ingestion (Event Stream vs On-Demand Polling):**
-   - *Current:* REST queries triggered when a user searches.
-   - *100x Scale:* Continuous event ingestion using **GH Archive** and repository webhooks. Issues, assignments, and PR closes are streamed into PostgreSQL, completely decoupling user requests from GitHub API rate limits.
+   - *Current Implementation:* Live REST queries triggered on-demand when a user initiates discovery.
+   - *100x Scale Plan:* Continuous event ingestion using **GH Archive** and repository webhooks. Issues, assignments, and PR closes are streamed into PostgreSQL, completely decoupling user requests from GitHub API rate limits.
 2. **Distributed Caching (Multi-Tier vs Local Disk):**
-   - *Current:* Local `.cache/` directory with atomic file renames and in-memory `Map<string, Promise>` deduplication.
-   - *100x Scale:* **Redis / Upstash cluster** with distributed locks (Redlock). Hot issues are served from an L1 in-memory LRU with a 99% hit rate.
+   - *Current Implementation:* Local `.cache/` directory with atomic file writes and in-memory `Map<string, Promise>` deduplication.
+   - *100x Scale Plan:* **Redis / Upstash cluster** with distributed locks (Redlock). Hot issues are served from an L1 in-memory LRU with a 99% hit rate.
 3. **API Rate Limit Economics:**
-   - *Current:* Personal PATs (5,000 req/hr) or unauthenticated fallback (60 req/hr).
-   - *100x Scale:* Deploy as a certified **GitHub App**, granting 15,000 requests/hour per installed organization, combined with GraphQL batching to fetch 100 issues + linked PRs in a single query.
+   - *Current Implementation:* User-provided personal access tokens (5,000 req/hr) or unauthenticated fallback (60 req/hr).
+   - *100x Scale Plan:* Deploy as a certified **GitHub App**, granting 15,000 requests/hour per installed organization, combined with GraphQL batching to fetch 100 issues + linked PRs in a single query.
 4. **LLM Inference Optimization:**
-   - *Current:* On-demand Gemma 4 completion with disk-cached responses (24h TTL).
-   - *100x Scale:* Tiered evaluation. Deterministic heuristics filter out 90% of issues; Gemma 4 is queued via batch worker only for the top 5 candidates per user. Pre-tokenized embeddings index repository difficulty.
+   - *Current Implementation:* On-demand Gemma 4 completion with disk-cached responses (24h TTL) restricted to top 3 candidates.
+   - *100x Scale Plan:* Tiered evaluation. Deterministic heuristics filter out 90% of issues; Gemma 4 is queued via batch worker only for the top 5 candidates per user. Pre-tokenized embeddings index repository difficulty.
 
 ---
 
 ## 🔒 Security & Privacy by Design
 
-- **Memory-Scoped Credentials (BYOK):** User-supplied GitHub tokens and Google AI Studio keys are scoped exclusively to the active HTTP request via Node's `AsyncLocalStorage`. They are never saved to `.env`, never written to disk, and never logged.
+- **Client-Side Storage & Request-Scoped Processing (BYOK):** Keys entered in the Web UI are stored exclusively in the browser's `localStorage` and sent per-request in HTTP headers. The backend uses `AsyncLocalStorage` to scope credentials strictly to that single active request; they are never written to server disk, databases, or logs. CLI runs optionally read local `.env` files.
 - **SSRF Hardening:** The internal GitHub fetch client (`gh()`) strictly validates origins against `api.github.com`, rejecting local subnet or redirected URLs.
 - **URL Protocol Sanitization:** Gemma-generated guide resources are validated through `isSafeHttpUrl()`, strictly permitting `http:` and `https:` schemes and blocking `javascript:` or `data:` injections.
 - **Safe Session Storage:** Client-side storage parsing is wrapped in fallback guards to eliminate white-screen crashes on truncated payloads.
@@ -326,7 +329,7 @@ scripts/              # Prefetch cache warmer & Jev evaluation benchmarks
 
 ## 📜 License
 
-Licensed under the **Apache License, Version 2.0** (the "License"). You may obtain a copy of the License in the [`LICENSE`](file:///c:/Users/niger/Documents/Contributor%20Compass/LICENSE) file or at:
+Licensed under the **Apache License, Version 2.0** (the "License"). You may obtain a copy of the License in the [`LICENSE`](LICENSE) file or at:
 
 [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
