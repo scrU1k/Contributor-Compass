@@ -36,23 +36,22 @@ doable — then generates a grounded **getting-started guide** for the one they 
 It bridges both themes: a developer tool (codebase/issue understanding) that serves
 open innovation (opening contribution up to newcomers).
 
-### Positioning (the headline)
+### Positioning & Wedge Analysis
 
-**"The category exists. Nobody verifies."**
+We evaluated three strategic product wedges:
 
-Discovery tools (`goodfirstissue.dev`, `up-for-grabs`, CodeTriage, GitHub label search)
-hand you a *static list* by scraping the global GitHub Search API. That approach has two fatal flaws:
-1. **Rate limit suicide:** GitHub's Search API enforces a strict **30 requests/minute** limit, easily breaking during live demos or high usage.
-2. **Garbage-in:** Blind search queries return abandoned forks, unmaintained student repos, and dead projects with stale "good-first-issue" labels.
+1. **Wedge A — "Verified, not listed." (Locked Core Headline · Highest Value-per-Hour):**
+   * *The Thesis:* Discovery tools hand developers a static, stale list. Nobody verifies feasibility right now: still unassigned? contested by an open PR? setup docs and CI present? outside contributor merges? semantic trap in the issue body?
+   * *The Pitch:* **"Good-first-issue lists go stale. We verify every issue is actually doable before you start."**
+   * *Status:* Shipped and demonstrated honestly through our dual-engine readiness scoring + empirical benchmark.
 
-Contributor Compass fixes this with a **Two-Stage Hybrid Discovery Engine**:
-- **Stage 1 (Repo Scout):** Selects from a curated registry using profile matching and optional Gemma selection, then supplements it with a small number of profile-based GitHub Search queries.
-- **Stage 2 (Targeted Core REST API):** Fetches a bounded issue sample for curated repositories; search results can add repositories outside the catalogue. Search is rate-limited and capped.
-- **The Core Differentiator (Live Verification):** Before an issue is shown, we confirm it is still unassigned, not already contested by an open PR, and sits in a repo that actually has setup docs, CI, and a history of merging outsider contributions.
+2. **Wedge B — "The contribution quality layer." (Narrative Context):**
+   * *The Thesis:* AI made low-effort pull requests easy to generate, increasing burden on open-source maintainers. Contributor Compass makes genuine, well-scoped contributions easier for newcomers.
+   * *Discipline:* Used as contemporary context for Hacktoberfest/open innovation, while avoiding claims that the tool currently functions as an automated maintainer spam classifier.
 
-Secondary narrative: **the contribution quality layer.** AI made contributing easy to
-fake; Hacktoberfest's well-known spam problem hurts maintainers. We use AI to make
-*genuine* contribution easier — the same scoring engine serves both sides.
+3. **Wedge C — "Merge Radar" (Deferred Future Research):**
+   * *The Thesis:* Predicting numeric merge odds (e.g. "78% merge odds") based on historical pull request mining.
+   * *Discipline:* Deferred to future research because presenting uncalibrated percentages without longitudinal datasets risks looking precise without being reliable.
 
 Deliberately avoided pitch: "get to a green test run" (Docker/build times destroy demos).
 
@@ -266,17 +265,27 @@ destination. This build accepts Gemma 4 model identifiers only.
 Hard rule: **any stage that can return nothing must degrade gracefully** — empty state,
 not a crash. A demo that shows a clean empty state is fine; a demo that spins forever is not.
 
-**Three entry points, one pipeline.**
+**Four entry points, one unified pipeline.**
 
 ```
-Guided wizard (newcomer)  ─┐
-Quick form (experienced)  ─┼─► retrieve → verify & score → rank → explain → guide
-Pasted issue URL (side)   ─┘        └──────── skipped ────────┘
+Guided wizard (newcomer)          ─┐
+Quick form (experienced)          ─┼─► S1/S2 retrieve → S3 verify & score → S4 rank → S5 explain → S6 guide
+Target URL/Org (web side door)   ─┤         ▲
+Terminal CLI (npm run cli)        ─┘         │ (Org/repo scopes S2; issue skips to S3)
 ```
 
-The pasted URL enters *after* retrieval and ranking — same verification, same score,
-same guide, just no discovery step. It is a shortcut for someone who already has an
-issue in hand, not a replacement for the guided flow.
+1. **Guided wizard (newcomer):** Interactive questionnaire building a tailored developer profile.
+2. **Quick form (experienced):** Minimal stack/interest input for fast matching.
+3. **Pasted GitHub target (side door):**
+   * *Issue URL (`/owner/repo/issues/123`):* Skips discovery; directly runs structural checks, readiness score, and Gemma 4 Jev semantic trap diagnosis.
+   * *Repository URL (`/owner/repo`):* Scopes discovery to open issues within that single repository.
+   * *Organization URL (`github.com/openstreetmap` or `openstreetmap`):* Resolves owner type, scans the top 100 active repositories, filters out archived/disabled/no-issue repos, budgets the top 5 active candidate repos, and returns ranked, verified issues with transparent coverage metrics (`"evaluated 5 active of 89 public repos"`).
+4. **Terminal CLI (`cli.ts`, `npm run cli`):**
+   * An in-terminal interactive shell for developers who prefer the command line.
+   * Parses natural language developer requests using Gemma 4 (with deterministic fallback).
+   * Displays parsed profile for confirmation/editing.
+   * Renders colorized readiness cards with Jev badges and grounded quotes.
+   * Generates step-by-step onboarding guides with verified file citations directly in the console.
 
 ---
 

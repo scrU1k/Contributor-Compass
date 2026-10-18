@@ -10,7 +10,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "prefetch": "tsx scripts/prefetch.ts",
-    "evaluate": "tsx scripts/evaluate_jev.ts"
+    "evaluate": "tsx scripts/evaluate_jev.ts",
+    "cli": "tsx cli.ts"
   },
   "dependencies": {
     "next": "^16.4.2",

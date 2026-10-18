@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { getIssue, parseIssueUrl } from "@/core/github/search";
+import { getIssue } from "@/core/github/search";
+import { parseGitHubTarget } from "@/core/github/url";
+import { discoverOrgCandidates, discoverRepoCandidates } from "@/core/github/org";
 import { getRepoSignals } from "@/core/github/signals";
 import { getRepoOpenPRs, linkedPRCount } from "@/core/github/issues";
 import { toCandidate } from "@/core/candidate";
@@ -13,7 +15,7 @@ import type { RankedCandidate, Tier } from "@/core/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** The side door: any GitHub issue URL in, a verified verdict out. */
+/** The side door: issue URL, repo URL, or entire organization/owner in, verified candidates out. */
 export async function POST(request: Request) {
   return withRequestConfig(configFromRequest(request), async () => {
     let body: { url?: unknown; tier?: unknown };
@@ -25,20 +27,49 @@ export async function POST(request: Request) {
 
     const url = typeof body.url === "string" ? body.url : "";
     const tier: Tier = body.tier === "experienced" ? "experienced" : "newcomer";
+    const profile = minimalProfile(tier);
 
-    const parsed = parseIssueUrl(url);
-    if (!parsed) {
+    const target = parseGitHubTarget(url);
+    if (!target) {
       return NextResponse.json(
-        { error: "That doesn't look like a GitHub issue URL. Expected /owner/repo/issues/123." },
+        {
+          error:
+            "Invalid GitHub URL or identifier. Expected an issue (/owner/repo/issues/123), repository (/owner/repo), or organization (github.com/openstreetmap or openstreetmap).",
+        },
         { status: 400 },
       );
     }
 
     try {
+      // 1. Organization / User target (e.g. "https://github.com/openstreetmap" or "openstreetmap")
+      if (target.kind === "owner") {
+        const orgResult = await discoverOrgCandidates(target.owner, profile);
+        return NextResponse.json({
+          mode: "org",
+          target,
+          org: orgResult,
+          candidates: orgResult.candidates,
+          candidate: orgResult.candidates[0] || null,
+        });
+      }
+
+      // 2. Repository target (e.g. "https://github.com/pallets/flask" or "pallets/flask")
+      if (target.kind === "repo") {
+        const repoResult = await discoverRepoCandidates(target.fullName, profile);
+        return NextResponse.json({
+          mode: "repo",
+          target,
+          org: repoResult,
+          candidates: repoResult.candidates,
+          candidate: repoResult.candidates[0] || null,
+        });
+      }
+
+      // 3. Single Issue target (e.g. "https://github.com/owner/repo/issues/123")
       const [issue, signals, pullsResult] = await Promise.all([
-        getIssue(parsed.repo, parsed.number),
-        getRepoSignals(parsed.repo),
-        getRepoOpenPRs(parsed.repo).catch(() => null),
+        getIssue(target.repo, target.number),
+        getRepoSignals(target.repo),
+        getRepoOpenPRs(target.repo).catch(() => null),
       ]);
       if (issue.state !== "open") {
         return NextResponse.json({ error: "That issue is closed, so it is not available to start." }, { status: 409 });
@@ -46,12 +77,11 @@ export async function POST(request: Request) {
 
       const candidate = toCandidate(
         issue,
-        parsed.repo,
+        target.repo,
         signals,
-        pullsResult ? linkedPRCount(pullsResult, parsed.number) : null,
+        pullsResult ? linkedPRCount(pullsResult, target.number) : null,
       );
 
-      const profile = minimalProfile(tier);
       // Run Gemma 4 Jev decision harness
       const jev = await evaluateIssueWithJev(candidate, signals).catch(() => undefined);
 
@@ -63,10 +93,15 @@ export async function POST(request: Request) {
       };
       scored.why = jev?.evidence || explainDeterministic(scored, profile);
 
-      return NextResponse.json({ candidate: scored });
+      return NextResponse.json({
+        mode: "issue",
+        target,
+        candidate: scored,
+        candidates: [scored],
+      });
     } catch (error) {
       return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Could not verify that issue" },
+        { error: error instanceof Error ? error.message : "Could not verify that GitHub target" },
         { status: 502 },
       );
     }
