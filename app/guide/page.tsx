@@ -26,6 +26,7 @@ export default function GuidePage() {
   const [payload, setPayload] = useState<GuidePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedPr, setCopiedPr] = useState(false);
 
   // Status tracking (Solved / PR Created / Merged)
   const [status, setStatus] = useState<"solved" | "pr_created" | "merged" | null>(null);
@@ -224,6 +225,36 @@ export default function GuidePage() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
+    }
+  }
+
+  function getPrTemplate(): string {
+    if (!payload) return "";
+    const c = payload.candidate;
+    const paths = payload.guidance.whereToLook.map((w) => `\`${w.path}\``).join(", ");
+    return [
+      `### Summary`,
+      `Fixes #${c.number}`,
+      ``,
+      `- Closes issue #${c.number}: "${c.title}"`,
+      paths ? `- Changes focused in: ${paths}` : `- Minimal targeted fix addressing the reported behavior`,
+      `- Verified locally with reproduction test case passing`,
+      ``,
+      `### Contributor Checklist`,
+      `- [x] Adheres to repository contributing guidelines`,
+      `- [x] Tests pass cleanly on local environment`,
+      `- [x] Minimal, focused changes without unnecessary dependencies`,
+    ].join("\n");
+  }
+
+  async function copyPrDescription() {
+    if (!payload) return;
+    try {
+      await navigator.clipboard.writeText(getPrTemplate());
+      setCopiedPr(true);
+      setTimeout(() => setCopiedPr(false), 2000);
+    } catch {
+      setCopiedPr(false);
     }
   }
 
@@ -478,6 +509,19 @@ export default function GuidePage() {
                 <pre>{payload.guidance.firstCommit.join("\n")}</pre>
                 <button type="button" className="btn btn-ghost copy-btn" onClick={copyCommit}>
                   {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </section>
+
+            <section className="guide-section">
+              <h2>Pull request description</h2>
+              <p className="hint-text" style={{ fontSize: "0.85rem", color: "var(--muted)", marginBottom: "0.6rem" }}>
+                Maintainers review and merge PRs faster when you link the issue and confirm local test coverage:
+              </p>
+              <div className="commit-box">
+                <pre>{getPrTemplate()}</pre>
+                <button type="button" className="btn btn-ghost copy-btn" onClick={copyPrDescription}>
+                  {copiedPr ? "Copied" : "Copy"}
                 </button>
               </div>
             </section>
