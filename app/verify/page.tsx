@@ -155,28 +155,9 @@ export default function FindByLinkPage() {
 
         <form className="panel" onSubmit={submit} style={{ display: "grid", gap: "1.25rem" }}>
           <div className="field">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-              <label className="field-label" style={{ margin: 0 }}>
-                GitHub Target Links ({urls.length})
-              </label>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={addUrlField}
-                style={{
-                  fontSize: "0.78rem",
-                  padding: "4px 10px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  border: "1px dashed var(--accent)",
-                  color: "var(--accent)",
-                }}
-                title="Add another GitHub link"
-              >
-                <span style={{ fontSize: "1rem", lineHeight: 1 }}>+</span> Add another link
-              </button>
-            </div>
+            <label className="field-label" style={{ marginBottom: "6px", display: "block" }}>
+              GitHub Target Links ({urls.length})
+            </label>
             <p className="field-hint" style={{ marginTop: 0, marginBottom: "10px" }}>
               Accepts issues (<code>pallets/flask#5555</code> or full URL), repositories (<code>facebook/react</code>), or organizations (<code>openstreetmap</code>).
             </p>
@@ -254,28 +235,6 @@ export default function FindByLinkPage() {
                   )}
                 </div>
               ))}
-            </div>
-
-            <div style={{ marginTop: "10px" }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={addUrlField}
-                style={{
-                  fontSize: "0.82rem",
-                  padding: "6px 14px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  border: "1px dashed var(--accent)",
-                  color: "var(--accent)",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                }}
-              >
-                <span style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1 }}>+</span>
-                <span>Add another link</span>
-              </button>
             </div>
           </div>
 

@@ -9,6 +9,9 @@ import type { IssueCandidate, Profile, RankedCandidate, Tier } from "@/core/type
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { z } from "zod";
+import { chatJSON, llmConfigured } from "@/core/llm/adapter";
+
 function findMatchedTags(cand: IssueCandidate, tags: string[]): string[] {
   const matches: string[] = [];
   const text = `${cand.title} ${cand.body} ${cand.signals.language ?? ""} ${(cand.signals.topics ?? []).join(" ")} ${(cand.labels ?? []).join(" ")}`.toLowerCase();
@@ -21,6 +24,83 @@ function findMatchedTags(cand: IssueCandidate, tags: string[]): string[] {
   }
   return matches;
 }
+
+const semanticTagSchema = z.record(z.string(), z.array(z.string()));
+
+/**
+ * Perform semantic matching of custom tags using Gemma, falling back to literal keyword matching.
+ * Conceptually relates domain tags (e.g. astronomy -> astrophysics, FITS; game dev -> shaders, engines).
+ */
+async function matchCustomTagsSemantically(
+  candidates: IssueCandidate[],
+  tags: string[],
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (candidates.length === 0 || tags.length === 0) return result;
+
+  // 1. Literal keyword matching baseline
+  for (const cand of candidates) {
+    const key = `${cand.repo}#${cand.number}`;
+    result.set(key, findMatchedTags(cand, tags));
+  }
+
+  if (!llmConfigured()) {
+    return result;
+  }
+
+  try {
+    const issueSummaries = candidates.slice(0, 15).map((cand) => ({
+      id: `${cand.repo}#${cand.number}`,
+      title: cand.title,
+      labels: cand.labels.slice(0, 6),
+      language: cand.signals.language ?? "unknown",
+      topics: (cand.signals.topics ?? []).slice(0, 6),
+      snippet: cand.body.slice(0, 250).replace(/\s+/g, " "),
+    }));
+
+    const tagsLowerMap = new Map(tags.map((t) => [t.toLowerCase().trim(), t]));
+
+    const response = await chatJSON(
+      [
+        {
+          role: "system",
+          content:
+            "You are an AI that evaluates open-source GitHub issues against user interest tags. Perform semantic matching: assign a tag if the issue is conceptually or technically related to that tag, even if the exact keyword is not present (for example, 'astronomy' matches astrophysics, FITS files, celestial coordinates; 'game dev' matches shaders, physics engine, sprites; 'security' matches cryptography, authentication, TLS, sanitization; 'docs' matches guides, tutorials, docstrings). Return a JSON object mapping each issue id to an array of matched tags from the user's tag list only. If none match, return an empty array.",
+        },
+        {
+          role: "user",
+          content: [
+            `User Custom Tags: ${JSON.stringify(tags)}`,
+            "",
+            "Issues to classify:",
+            JSON.stringify(issueSummaries, null, 2),
+            "",
+            'Return format: { "<repo>#<number>": ["tag1", "tag2"] }',
+          ].join("\n"),
+        },
+      ],
+      semanticTagSchema,
+      { maxTokens: 800, temperature: 0.1, timeoutMs: 15_000 },
+    );
+
+    for (const [id, matched] of Object.entries(response)) {
+      if (!Array.isArray(matched)) continue;
+      const existing = new Set(result.get(id) ?? []);
+      for (const m of matched) {
+        const canonical = tagsLowerMap.get(m.toLowerCase().trim());
+        if (canonical) {
+          existing.add(canonical);
+        }
+      }
+      result.set(id, Array.from(existing));
+    }
+  } catch {
+    // Graceful fallback to keyword matches already populated in `result`
+  }
+
+  return result;
+}
+
 
 /**
  * Find by Link: verify single or multiple issue URLs, repo URLs, or organizations,
@@ -144,8 +224,10 @@ export async function POST(request: Request) {
 
     // Tag matching & sorting
     if (cleanTags.length > 0) {
+      const semanticTagMap = await matchCustomTagsSemantically(allCandidates, cleanTags);
       allCandidates.forEach((cand) => {
-        cand.matchedTags = findMatchedTags(cand, cleanTags);
+        const key = `${cand.repo}#${cand.number}`;
+        cand.matchedTags = semanticTagMap.get(key) ?? [];
       });
 
       allCandidates.sort((a, b) => {

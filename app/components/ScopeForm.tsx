@@ -142,6 +142,7 @@ export function ScopeForm() {
   function proceedToResults(prof: Profile) {
     sessionStorage.removeItem("compass.results");
     sessionStorage.removeItem("compass.scout");
+    sessionStorage.removeItem("compass.results_profile_hash");
     sessionStorage.setItem("compass.profile", JSON.stringify(prof));
     router.push("/results");
   }

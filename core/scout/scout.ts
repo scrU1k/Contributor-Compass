@@ -128,21 +128,47 @@ export function registryScore(profile: Profile, repo: RegistryRepo): number {
   return topicScore + (langMatch ? 4 : 0);
 }
 
+let scoutRotationCounter = 0;
+
 export function scoutDeterministic(profile: Profile, limit = 5): ScoutResult {
   const validInterests = profile.interests
     .map((i) => i.toLowerCase().trim())
     .filter((i) => i && !/^not sure(?: open to anything)?$/i.test(i));
 
-  const ranked = REGISTRY.map((repo, index) => ({
+  const scored = REGISTRY.map((repo, index) => ({
     repo,
     index,
     score: registryScore(profile, repo),
-  }))
-    .filter((r) => validInterests.length === 0 || r.score > 0)
-    .sort((a, b) => b.score - a.score || a.index - b.index);
+  })).filter((r) => validInterests.length === 0 || r.score > 0);
+
+  // Group by score so repos within the same relevance tier rotate across consecutive queries
+  const byScore = new Map<number, typeof scored>();
+  for (const item of scored) {
+    const list = byScore.get(item.score) ?? [];
+    list.push(item);
+    byScore.set(item.score, list);
+  }
+
+  // Sort score buckets descending
+  const sortedScores = Array.from(byScore.keys()).sort((a, b) => b - a);
+  const selected: typeof scored = [];
+  const offset = scoutRotationCounter++;
+
+  for (const score of sortedScores) {
+    const bucket = byScore.get(score) ?? [];
+    if (bucket.length <= 1) {
+      selected.push(...bucket);
+    } else {
+      // Rotate bucket starting index to sample different projects sharing the top score
+      const shift = offset % bucket.length;
+      const rotated = [...bucket.slice(shift), ...bucket.slice(0, shift)];
+      selected.push(...rotated);
+    }
+    if (selected.length >= limit * 2) break;
+  }
 
   return {
-    repos: ranked.slice(0, limit).map(({ repo }) => ({
+    repos: selected.slice(0, limit).map(({ repo }) => ({
       fullName: repo.fullName,
       why: repo.note,
     })),
@@ -189,7 +215,7 @@ export async function scoutRepos(profile: Profile, limit = 5): Promise<ScoutResu
             `- Pick between 1 and ${limit}.`,
             "- Use only fullName values that appear in the catalogue.",
             "- Prefer projects where this person could realistically get a first pull request merged.",
-            "- Match their languages, but let strong interest overlap win over a weak language match.",
+            "- If the developer specified explicit interests, ONLY select repositories matching those interests. Do not pick unrelated repositories just because the programming language matches (e.g. if interest is games, pick game engines; do not pick cryptography).",
             "- For a newcomer, prefer smaller, friendlier projects over huge monorepos.",
             "",
             "Developer:",
@@ -203,7 +229,7 @@ export async function scoutRepos(profile: Profile, limit = 5): Promise<ScoutResu
         },
       ],
       scoutSchema,
-      { maxTokens: 800, temperature: 0.1 },
+      { maxTokens: 800, temperature: 0.2 },
     );
 
     const verified: ScoutedRepo[] = [];

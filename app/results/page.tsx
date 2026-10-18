@@ -64,6 +64,7 @@ export default function ResultsPage() {
 
       // Cache results in sessionStorage so navigating to guide and back is instantaneous
       sessionStorage.setItem("compass.results", JSON.stringify(fetchedResults));
+      sessionStorage.setItem("compass.results_profile_hash", summary(parsedProfile));
       if (fetchedScout) {
         sessionStorage.setItem("compass.scout", JSON.stringify(fetchedScout));
       }
@@ -111,11 +112,13 @@ export default function ResultsPage() {
     setProfile(parsed);
     setHasKeys(Boolean(loadSettings().llmApiKey.trim() || loadSettings().githubToken.trim()));
 
-    // Check if we already have cached search results in sessionStorage
+    // Check if we already have cached search results in sessionStorage for this EXACT profile
     const cachedResultsRaw = sessionStorage.getItem("compass.results");
     const cachedScoutRaw = sessionStorage.getItem("compass.scout");
+    const cachedProfileHash = sessionStorage.getItem("compass.results_profile_hash");
+    const currentProfileHash = summary(parsed);
 
-    if (cachedResultsRaw) {
+    if (cachedResultsRaw && cachedProfileHash === currentProfileHash) {
       try {
         const cachedResults = JSON.parse(cachedResultsRaw) as RankedCandidate[];
         const cachedScout = cachedScoutRaw ? (JSON.parse(cachedScoutRaw) as ScoutInfo) : null;
@@ -127,7 +130,7 @@ export default function ResultsPage() {
       }
     }
 
-    // No cache: perform initial search
+    // No cache or different query: perform fresh search
     void fetchIssues(parsed);
   }, [router, fetchIssues]);
 
@@ -135,6 +138,7 @@ export default function ResultsPage() {
     if (!profile) return;
     sessionStorage.removeItem("compass.results");
     sessionStorage.removeItem("compass.scout");
+    sessionStorage.removeItem("compass.results_profile_hash");
     setResults(null);
     void fetchIssues(profile);
   }

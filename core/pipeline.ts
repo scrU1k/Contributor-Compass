@@ -5,6 +5,7 @@ import { repoNamespaceFromUrl, searchIssues, type GhIssue } from "@/core/github/
 import { fitsHardConstraints, hasNotReadyLabels, isPromising } from "@/core/github/filters";
 import { scoutRepos, type ScoutResult } from "@/core/scout/scout";
 import { rankCandidates } from "@/core/rank/rank";
+import { scoreCandidate } from "@/core/score/readiness";
 import { evaluateIssueWithJev } from "@/core/verify/jev";
 import { llmConfigured } from "@/core/llm/adapter";
 import { env } from "@/core/config/env";
@@ -157,22 +158,55 @@ export async function runMatch(profile: Profile, limit = 10): Promise<MatchResul
     }
   }
   if (discovered.length) scout.source = "hybrid";
-  const pool = [...batches.flat(), ...discovered];
+
+  const curatedPool = batches.flat();
+  let pool: RankedCandidate[];
+
+  if (discovered.length > 0 && curatedPool.length > 0) {
+    // 4:1 compositional ratio: ~80% live interest-tuned discovery, ~20% curated anchors
+    const targetDiscovered = Math.max(1, Math.round(limit * 0.8));
+    const targetCurated = Math.max(1, limit - targetDiscovered);
+
+    const [rankedDiscovered, rankedCurated] = await Promise.all([
+      rankCandidates(discovered, profile, discovered.length),
+      rankCandidates(curatedPool, profile, curatedPool.length),
+    ]);
+
+    const chosenDiscovered = rankedDiscovered.slice(0, targetDiscovered);
+    const chosenCurated = rankedCurated.slice(0, targetCurated);
+
+    // Mutual backfill if either pool has fewer candidates than its quota
+    const slotsRemaining = limit - (chosenDiscovered.length + chosenCurated.length);
+    if (slotsRemaining > 0) {
+      if (chosenDiscovered.length < targetDiscovered) {
+        const extraCurated = rankedCurated.slice(chosenCurated.length, chosenCurated.length + slotsRemaining);
+        chosenCurated.push(...extraCurated);
+      } else if (chosenCurated.length < targetCurated) {
+        const extraDiscovered = rankedDiscovered.slice(chosenDiscovered.length, chosenDiscovered.length + slotsRemaining);
+        chosenDiscovered.push(...extraDiscovered);
+      }
+    }
+
+    pool = [...chosenDiscovered, ...chosenCurated];
+  } else {
+    const rawPool = discovered.length > 0 ? discovered : curatedPool;
+    pool = await rankCandidates(rawPool, profile, limit);
+  }
+
   // Deterministic scoring narrows model work to three candidates per request.
   if (llmConfigured() && pool.length) {
-    const shortlist = await rankCandidates(pool, profile, Math.min(3, pool.length));
+    const shortlist = pool.slice(0, Math.min(3, pool.length));
     const decisions = await Promise.all(shortlist.map((candidate) =>
       evaluateIssueWithJev(candidate, candidate.signals).catch(() => undefined),
     ));
     decisions.forEach((decision, index) => {
-      if (decision) shortlist[index].jevDecision = decision;
+      if (decision) {
+        shortlist[index].jevDecision = decision;
+        shortlist[index].score = scoreCandidate(shortlist[index], profile, { jev: decision });
+      }
     });
-    const jevById = new Map(shortlist.map((candidate) => [`${candidate.repo}#${candidate.number}`, candidate.jevDecision]));
-    for (const candidate of pool) {
-      const decision = jevById.get(`${candidate.repo}#${candidate.number}`);
-      if (decision) candidate.jevDecision = decision;
-    }
   }
-  const ranked = await rankCandidates(pool, profile, limit);
-  return { candidates: ranked, scout };
+
+  pool.sort((a, b) => b.score.total - a.score.total || a.number - b.number);
+  return { candidates: pool.slice(0, limit), scout };
 }

@@ -5,6 +5,9 @@
   "type": "module",
   "license": "Apache-2.0",
   "description": "Verified, ready-to-work paths into open source.",
+  "bin": {
+    "contributor-compass": "./cli.ts"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
