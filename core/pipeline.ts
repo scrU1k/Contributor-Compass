@@ -29,27 +29,37 @@ export interface MatchResult {
 
 const REPOS_TO_SCOUT = 3;
 const ISSUES_PER_REPO = 6;
-const LIVE_SEARCH_REPOS = 3;
+const LIVE_SEARCH_REPOS = 6;
 
 function liveDiscoveryQueries(profile: Profile): string[] {
   const languages = profile.stack.map((s) => s.tech.replace(/[^a-zA-Z0-9+#.-]/g, "")).filter(Boolean);
-  const langQuery = languages.length > 0 ? ` language:${languages[0]}` : "";
   const queries: string[] = [];
 
   const validInterests = profile.interests
     .map((i) => i.replace(/[^a-zA-Z0-9+#.-]/g, " ").trim())
     .filter((i) => i && !/^not sure(?: open to anything)?$/i.test(i))
-    .slice(0, 3);
+    .slice(0, 4);
 
-  for (const term of validInterests) {
-    queries.push(`is:issue is:open no:assignee "${term}"${langQuery}`);
+  // Generate targeted live discovery queries across distinct interests and user stack languages
+  for (let idx = 0; idx < validInterests.length; idx++) {
+    const rawInterest = validInterests[idx];
+    const cleanedInterest = rawInterest.replace(/[/,&|]+/g, " ").trim();
+    // Rotate across languages in user's stack instead of locking onto only the first language
+    const lang = languages.length > 0 ? languages[idx % languages.length] : "";
+    const langFilter = lang ? ` language:${lang}` : "";
+    queries.push(`is:issue is:open no:assignee "${cleanedInterest}"${langFilter}`);
   }
 
-  if (queries.length === 0) {
-    queries.push(`is:issue is:open no:assignee label:"good first issue","help wanted",beginner${langQuery}`);
+  // Also include a focused query targeting beginner-friendly labels for the primary interest
+  if (validInterests.length > 0) {
+    const primary = validInterests[0].replace(/[/,&|]+/g, " ").trim();
+    queries.push(`is:issue is:open no:assignee label:"good first issue","help wanted" "${primary}"`);
+  } else {
+    const lang = languages[0] ? ` language:${languages[0]}` : "";
+    queries.push(`is:issue is:open no:assignee label:"good first issue","help wanted",beginner${lang}`);
   }
 
-  return [...new Set(queries)].slice(0, 3);
+  return [...new Set(queries)].slice(0, 4);
 }
 
 async function discoverOutsideRegistry(profile: Profile, knownRepos: Set<string>): Promise<IssueCandidate[]> {

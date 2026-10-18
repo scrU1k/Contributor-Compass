@@ -128,20 +128,43 @@ export function SiteHeader() {
             )}
           </button>
 
+          {/* Saved Option placed between theme toggle and Find issues */}
+          <Link
+            href="/results?tab=saved"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              textDecoration: "none",
+              fontSize: "0.85rem",
+              fontWeight: 550,
+              color: savedCount > 0 ? "var(--accent)" : "var(--muted)",
+            }}
+            title="View saved issues"
+          >
+            <span style={{ fontSize: "0.95rem" }}>★</span>
+            <span>Saved</span>
+            {savedCount > 0 && (
+              <span
+                style={{
+                  background: "var(--accent)",
+                  color: "#fff",
+                  fontSize: "0.68rem",
+                  fontWeight: 700,
+                  borderRadius: "999px",
+                  padding: "1px 6px",
+                  marginLeft: "2px",
+                  lineHeight: 1.2,
+                }}
+              >
+                {savedCount}
+              </span>
+            )}
+          </Link>
+
           <Link href="/">Find issues</Link>
           <Link href="/verify">Verify a link</Link>
           <Link href="/settings">Keys</Link>
-
-          {savedCount > 0 && (
-            <Link
-              href="/results?tab=saved"
-              className="badge neutral"
-              title="View bookmarked issues"
-              style={{ fontSize: "0.74rem", padding: "0.2rem 0.55rem", textDecoration: "none" }}
-            >
-              ★ {savedCount} Saved
-            </Link>
-          )}
 
           {historyCount > 0 && (
             <span

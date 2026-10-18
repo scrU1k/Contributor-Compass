@@ -33,9 +33,21 @@ export interface ScoutResult {
  * is the Repo Scout's job when a model is configured.
  */
 const ALIASES: Record<string, string[]> = {
-  documentation: ["docs"],
-  doc: ["docs"],
-  docs: ["documentation"],
+  games: ["game", "graphics", "gamedev", "engine"],
+  game: ["games", "graphics", "gamedev", "engine"],
+  gaming: ["games", "game", "gamedev"],
+  gamedev: ["games", "game", "engine", "graphics"],
+  education: ["learning", "learn", "curriculum", "tutorial", "docs"],
+  learning: ["education", "tutorial"],
+  documentation: ["docs", "doc"],
+  docs: ["documentation", "doc"],
+  doc: ["docs", "documentation"],
+  "design / frontend": ["design", "frontend", "ui", "ux", "css", "web"],
+  design: ["frontend", "ui", "ux", "css"],
+  frontend: ["design", "ui", "ux", "css", "web"],
+  ui: ["design", "frontend", "ux"],
+  ux: ["design", "frontend", "ui"],
+  accessibility: ["design", "a11y"],
   "developer tools": ["devtools", "cli"],
   "developer tooling": ["devtools", "cli"],
   devtools: ["developer tools", "cli"],
@@ -44,9 +56,6 @@ const ALIASES: Record<string, string[]> = {
   "machine learning": ["ml"],
   "artificial intelligence": ["ml"],
   ai: ["ml"],
-  ui: ["design", "frontend"],
-  ux: ["design", "frontend"],
-  accessibility: ["design", "a11y"],
   cryptography: ["crypto", "security", "cybersecurity", "encryption", "tls", "ssl"],
   compression: ["zstd", "lz4", "brotli", "gzip", "archive", "algorithm"],
   cybersecurity: ["security", "cryptography", "infosec", "vulnerability"],
@@ -66,56 +75,52 @@ const scoutSchema = z.object({
     .max(8),
 });
 
-function wantedTerms(profile: Profile): string[] {
-  const terms = new Set<string>();
-
-  const add = (value: string) => {
-    const key = value.toLowerCase().trim();
-    if (!key) return;
-    terms.add(key);
-    for (const alias of ALIASES[key] ?? []) terms.add(alias);
-  };
-
-  for (const s of profile.stack) add(s.tech);
-  for (const i of profile.interests) add(i);
-  for (const c of profile.contributionTypes) add(c);
-  return [...terms];
-}
-
 /** Deterministic relevance: strictly prioritizes interest overlap over generic language matches. */
 export function registryScore(profile: Profile, repo: RegistryRepo): number {
-  const terms = wantedTerms(profile);
-  let topicScore = 0;
-  let hasInterestMatch = false;
-
   const validInterests = profile.interests
     .map((i) => i.toLowerCase().trim())
     .filter((i) => i && !/^not sure(?: open to anything)?$/i.test(i));
 
+  // Build normalized interest terms including sub-parts (e.g. "design / frontend" -> "design", "frontend")
+  const interestTerms = new Set<string>();
+  for (const raw of validInterests) {
+    interestTerms.add(raw);
+    for (const part of raw.split(/[/,&|]+/).map((p) => p.trim()).filter(Boolean)) {
+      interestTerms.add(part);
+      for (const a of ALIASES[part] ?? []) interestTerms.add(a);
+    }
+    for (const a of ALIASES[raw] ?? []) interestTerms.add(a);
+  }
+
   const repoTopics = repo.topics.map((t) => t.toLowerCase());
+  let topicScore = 0;
+  let hasInterestMatch = false;
 
   for (const topic of repoTopics) {
-    for (const term of terms) {
-      if (topic === term) {
-        topicScore += 8;
-        if (validInterests.includes(term) || validInterests.some((vi) => (ALIASES[vi] ?? []).includes(topic))) {
+    if (interestTerms.has(topic)) {
+      topicScore += 10;
+      hasInterestMatch = true;
+    } else {
+      // Meaningful prefix / suffix match (minimum length 3 to prevent single-letter leakage)
+      for (const it of interestTerms) {
+        if (it.length >= 3 && topic.length >= 3 && (topic.startsWith(it) || it.startsWith(topic))) {
+          topicScore += 4;
           hasInterestMatch = true;
-        }
-      } else if (topic.includes(term) || term.includes(topic)) {
-        topicScore += 3;
-        if (validInterests.some((vi) => topic.includes(vi) || vi.includes(topic))) {
-          hasInterestMatch = true;
+          break;
         }
       }
     }
   }
 
-  // If the user specified explicit interests, repos with 0 interest match must NOT crowd out relevant repos!
+  // If the user specified explicit interests, repos with 0 interest match must NEVER be selected!
   if (validInterests.length > 0 && !hasInterestMatch) {
     return 0;
   }
 
-  const langMatch = terms.includes(repo.language.toLowerCase());
+  // Language match only awards bonus points if interests matched or user has no specific interests
+  const userLanguages = profile.stack.map((s) => s.tech.toLowerCase());
+  const langMatch = userLanguages.includes(repo.language.toLowerCase());
+
   if (profile.contributionTypes.includes("docs") && repoTopics.includes("docs")) {
     topicScore += 2;
   }

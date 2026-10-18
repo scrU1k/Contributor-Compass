@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { Profile, RankedCandidate } from "@/core/types";
 import { verdict } from "@/core/format/plain";
 
@@ -28,6 +28,34 @@ export function ResultsNodeGraph({
   onSelectCandidate,
 }: ResultsNodeGraphProps) {
   const [hovered, setHovered] = useState<HoverData | null>(null);
+  const [pinned, setPinned] = useState<HoverData | null>(null);
+  const leaveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Active popover displays pinned data if clicked, or hovered data otherwise
+  const activeData = pinned ?? hovered;
+
+  const handleMouseEnter = (data: HoverData) => {
+    if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
+    setHovered(data);
+  };
+
+  const handleMouseLeave = () => {
+    if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
+    leaveTimeout.current = setTimeout(() => {
+      setHovered(null);
+    }, 220);
+  };
+
+  const handleClickNode = (data: HoverData) => {
+    if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
+    // Toggle pin on click
+    if (pinned?.title === data.title) {
+      setPinned(null);
+    } else {
+      setPinned(data);
+      setHovered(null);
+    }
+  };
 
   if (!candidates || candidates.length === 0) return null;
 
@@ -72,15 +100,15 @@ export function ResultsNodeGraph({
   });
 
   // Clamped stable coordinates for popover card so it never clips and doesn't overlap cursor
-  const popoverLeft = hovered
-    ? hovered.type === "issue"
+  const popoverLeft = activeData
+    ? activeData.type === "issue"
       ? 43
-      : hovered.type === "repo"
+      : activeData.type === "repo"
         ? 42
         : 14
     : 0;
 
-  const popoverTop = hovered ? Math.min(Math.max(hovered.y - 70, 25), 230) : 0;
+  const popoverTop = activeData ? Math.min(Math.max(activeData.y - 70, 25), 230) : 0;
 
   return (
     <div className="node-graph-container panel" style={{ marginBottom: "2.5rem", position: "relative" }}>
@@ -231,43 +259,45 @@ export function ResultsNodeGraph({
           {repoNodes.map((r, i) => {
             const shortName = r.name.split("/")[1] || r.name;
             const signals = r.candidates[0]?.signals;
-            const isHovered = hovered?.type === "repo" && hovered.title === r.name;
+            const isHovered = activeData?.type === "repo" && activeData.title === r.name;
+            const isPinned = pinned?.type === "repo" && pinned.title === r.name;
+
+            const repoData: HoverData = {
+              type: "repo",
+              title: r.name,
+              subtitle: signals?.description ?? "Scouted repository",
+              badge: { label: `${signals?.stars ?? 0} ★`, tone: "neutral" },
+              details: [
+                `CI Workflow: ${signals?.hasCI ? "Present ✓" : "None"}`,
+                `Outsider Merges: ${signals?.mergedPRsFromOutsiders90d ?? 0} in 90d`,
+                `Documentation: ${signals?.hasContributing ? "CONTRIBUTING.md ✓" : "README only"}`,
+                `Candidate Issues: ${r.candidates.length}`,
+              ],
+              x: r.x,
+              y: r.y,
+            };
 
             return (
               <g
                 key={`repo-node-${i}`}
                 transform={`translate(${r.x}, ${r.y})`}
                 style={{ cursor: "pointer" }}
-                onMouseEnter={() => {
-                  setHovered({
-                    type: "repo",
-                    title: r.name,
-                    subtitle: signals?.description ?? "Scouted repository",
-                    badge: { label: `${signals?.stars ?? 0} ★`, tone: "neutral" },
-                    details: [
-                      `CI Workflow: ${signals?.hasCI ? "Present ✓" : "None"}`,
-                      `Outsider Merges: ${signals?.mergedPRsFromOutsiders90d ?? 0} in 90d`,
-                      `Documentation: ${signals?.hasContributing ? "CONTRIBUTING.md ✓" : "README only"}`,
-                      `Candidate Issues: ${r.candidates.length}`,
-                    ],
-                    x: r.x,
-                    y: r.y,
-                  });
-                }}
-                onMouseLeave={() => setHovered(null)}
+                onClick={() => handleClickNode(repoData)}
+                onMouseEnter={() => handleMouseEnter(repoData)}
+                onMouseLeave={handleMouseLeave}
               >
-                {/* Generous hit area */}
-                <circle r={32} fill="transparent" />
+                {/* Generous hit area with pointerEvents="all" to eliminate cursor flicker */}
+                <rect x={-32} y={-32} width={64} height={64} fill="rgba(0,0,0,0.001)" pointerEvents="all" />
 
                 <circle
                   r={22}
                   fill="#182032"
-                  stroke={isHovered ? "var(--accent)" : "rgba(111, 157, 237, 0.85)"}
-                  strokeWidth={isHovered ? 2.8 : 1.6}
-                  filter={isHovered ? "url(#intenseGlow)" : "url(#nodeGlow)"}
+                  stroke={isPinned ? "var(--accent)" : isHovered ? "var(--accent)" : "rgba(111, 157, 237, 0.85)"}
+                  strokeWidth={isHovered || isPinned ? 2.8 : 1.6}
+                  filter={isHovered || isPinned ? "url(#intenseGlow)" : "url(#nodeGlow)"}
                   style={{
                     pointerEvents: "none",
-                    transform: isHovered ? "scale(1.12)" : "scale(1)",
+                    transform: isHovered || isPinned ? "scale(1.12)" : "scale(1)",
                     transformOrigin: "center",
                     transformBox: "fill-box",
                     transition: "transform 0.2s ease, stroke 0.2s ease",
@@ -283,51 +313,52 @@ export function ResultsNodeGraph({
             );
           })}
 
-          {/* 3. Issue Nodes (Firmly static, reliable hover menu) */}
+          {/* 3. Issue Nodes (Firmly static, click to pin inspection menu) */}
           {issueNodes.map((item, i) => {
             const c = item.candidate;
             const v = verdict(c);
-            const isHovered = hovered?.candidate?.url === c.url;
+            const isHovered = activeData?.candidate?.url === c.url;
+            const isPinned = pinned?.candidate?.url === c.url;
             const strokeColor =
               v.tone === "good" ? "var(--ok, #5fd39a)" : v.tone === "warn" ? "var(--warn, #e5b567)" : "var(--bad, #e26e6e)";
+
+            const issueData: HoverData = {
+              type: "issue",
+              title: `#${c.number}: ${c.title}`,
+              subtitle: `${c.repo} • Readiness: ${c.score.total.toFixed(0)}/100`,
+              badge: { label: v.label, tone: v.tone },
+              details: [
+                `Effort: ${c.sizeHint}`,
+                `Competition: ${c.linkedOpenPRs === 0 ? "0 open PRs ✓" : `${c.linkedOpenPRs} open PRs`}`,
+                `Assignment: ${c.assigned ? "Assigned" : "Unassigned ✓"}`,
+              ],
+              quote: c.jevDecision?.quoteVerified ? c.jevDecision.quote : null,
+              candidate: c,
+              x: item.x,
+              y: item.y,
+            };
 
             return (
               <g
                 key={`issue-node-${i}`}
                 transform={`translate(${item.x}, ${item.y})`}
                 style={{ cursor: "pointer" }}
-                onClick={() => onSelectCandidate(c)}
-                onMouseEnter={() => {
-                  setHovered({
-                    type: "issue",
-                    title: `#${c.number}: ${c.title}`,
-                    subtitle: `${c.repo} • Readiness: ${c.score.total.toFixed(0)}/100`,
-                    badge: { label: v.label, tone: v.tone },
-                    details: [
-                      `Effort: ${c.sizeHint}`,
-                      `Competition: ${c.linkedOpenPRs === 0 ? "0 open PRs ✓" : `${c.linkedOpenPRs} open PRs`}`,
-                      `Assignment: ${c.assigned ? "Assigned" : "Unassigned ✓"}`,
-                    ],
-                    quote: c.jevDecision?.quoteVerified ? c.jevDecision.quote : null,
-                    candidate: c,
-                    x: item.x,
-                    y: item.y,
-                  });
-                }}
-                onMouseLeave={() => setHovered(null)}
+                onClick={() => handleClickNode(issueData)}
+                onMouseEnter={() => handleMouseEnter(issueData)}
+                onMouseLeave={handleMouseLeave}
               >
-                {/* Generous hit area covering node and label */}
-                <rect x={-24} y={-16} width={220} height={32} fill="transparent" />
+                {/* Generous hit area covering node and label with pointerEvents="all" */}
+                <rect x={-26} y={-18} width={230} height={36} fill="rgba(0,0,0,0.001)" pointerEvents="all" />
 
                 <circle
                   r={18}
                   fill="#151b29"
-                  stroke={strokeColor}
-                  strokeWidth={isHovered ? 3.2 : 2}
-                  filter={isHovered ? "url(#intenseGlow)" : undefined}
+                  stroke={isPinned ? "var(--accent)" : strokeColor}
+                  strokeWidth={isHovered || isPinned ? 3.2 : 2}
+                  filter={isHovered || isPinned ? "url(#intenseGlow)" : undefined}
                   style={{
                     pointerEvents: "none",
-                    transform: isHovered ? "scale(1.15)" : "scale(1)",
+                    transform: isHovered || isPinned ? "scale(1.15)" : "scale(1)",
                     transformOrigin: "center",
                     transformBox: "fill-box",
                     transition: "transform 0.2s ease, stroke 0.2s ease",
@@ -336,7 +367,7 @@ export function ResultsNodeGraph({
                 <text textAnchor="middle" dy="4" fill="#e8ecf3" fontSize="9" fontWeight="bold" style={{ pointerEvents: "none", userSelect: "none" }}>
                   #{c.number}
                 </text>
-                <text x="26" y="4" fill={isHovered ? "var(--fg)" : "#cbd5e1"} fontSize="10.5" fontWeight={isHovered ? "600" : "500"} style={{ pointerEvents: "none", userSelect: "none" }}>
+                <text x="26" y="4" fill={isHovered || isPinned ? "var(--fg)" : "#cbd5e1"} fontSize="10.5" fontWeight={isHovered || isPinned ? "650" : "500"} style={{ pointerEvents: "none", userSelect: "none" }}>
                   {c.title.length > 25 ? `${c.title.slice(0, 25)}…` : c.title}
                 </text>
               </g>
@@ -344,22 +375,26 @@ export function ResultsNodeGraph({
           })}
         </svg>
 
-        {/* Stable Hover Popover Card positioned cleanly to the side */}
-        {hovered && (
+        {/* Stable Hover & Pinned Popover Card positioned cleanly to the side */}
+        {activeData && (
           <div
             className="graph-hover-popover"
+            onMouseEnter={() => {
+              if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
+            }}
+            onMouseLeave={handleMouseLeave}
             style={{
               position: "absolute",
               left: `${popoverLeft}%`,
               top: `${popoverTop}px`,
               zIndex: 30,
               pointerEvents: "auto",
-              minWidth: "280px",
-              maxWidth: "350px",
-              background: "rgba(18, 23, 36, 0.97)",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              border: "1px solid var(--line)",
+              minWidth: "290px",
+              maxWidth: "360px",
+              background: "rgba(18, 23, 36, 0.98)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: pinned ? "1.5px solid var(--accent)" : "1px solid var(--line)",
               boxShadow: "0 16px 36px rgba(0,0,0,0.55), 0 0 20px rgba(111,157,237,0.18)",
               borderRadius: "10px",
               padding: "0.9rem 1.1rem",
@@ -368,42 +403,68 @@ export function ResultsNodeGraph({
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "4px" }}>
               <div style={{ fontWeight: 650, fontSize: "0.88rem", color: "var(--fg)", lineHeight: 1.3 }}>
-                {hovered.title}
+                {activeData.title}
               </div>
-              {hovered.badge && (
-                <span className={`badge ${hovered.badge.tone}`} style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem", whiteSpace: "nowrap" }}>
-                  {hovered.badge.label}
-                </span>
-              )}
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                {pinned?.title === activeData.title && (
+                  <span className="badge accent" style={{ fontSize: "0.68rem", padding: "0.1rem 0.35rem" }}>
+                    📌 Pinned
+                  </span>
+                )}
+                {activeData.badge && (
+                  <span className={`badge ${activeData.badge.tone}`} style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem", whiteSpace: "nowrap" }}>
+                    {activeData.badge.label}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "0.95rem", padding: "0 3px" }}
+                  onClick={() => { setPinned(null); setHovered(null); }}
+                  title="Close popover"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            {hovered.subtitle && (
+            {activeData.subtitle && (
               <div className="subtle" style={{ fontSize: "0.76rem", marginBottom: "0.5rem" }}>
-                {hovered.subtitle}
+                {activeData.subtitle}
               </div>
             )}
 
             <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.1rem", fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.45 }}>
-              {hovered.details.map((d, idx) => (
+              {activeData.details.map((d, idx) => (
                 <li key={idx}>{d}</li>
               ))}
             </ul>
 
-            {hovered.quote && (
+            {activeData.quote && (
               <div style={{ marginTop: "0.6rem", padding: "0.45rem 0.65rem", background: "rgba(95, 211, 154, 0.08)", borderLeft: "2px solid var(--ok)", borderRadius: "4px", fontSize: "0.75rem", fontStyle: "italic", color: "#a7f3d0" }}>
-                🔍 &ldquo;{hovered.quote}&rdquo;
+                🔍 &ldquo;{activeData.quote}&rdquo;
               </div>
             )}
 
-            {hovered.candidate && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: "100%", marginTop: "0.8rem", padding: "0.38rem 0.6rem", fontSize: "0.82rem" }}
-                onClick={() => onSelectCandidate(hovered.candidate!)}
-              >
-                Get Step-by-Step Guide ➔
-              </button>
+            {activeData.candidate && (
+              <div style={{ display: "flex", gap: "8px", marginTop: "0.85rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ flex: 1, padding: "0.42rem 0.6rem", fontSize: "0.82rem" }}
+                  onClick={() => onSelectCandidate(activeData.candidate!)}
+                >
+                  Get the Guide ➔
+                </button>
+                <a
+                  className="btn btn-ghost"
+                  style={{ padding: "0.42rem 0.6rem", fontSize: "0.82rem" }}
+                  href={activeData.candidate.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  GitHub ↗
+                </a>
+              </div>
             )}
           </div>
         )}

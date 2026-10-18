@@ -126,10 +126,10 @@ export const REGISTRY: RegistryRepo[] = [
   repo("biopython/biopython", "Python", ["bioinformatics", "biology", "science", "genetics"], "Tools for biological computation and molecular biology."),
 
   // Security, Cryptography & Compression
-  repo("pyca/cryptography", "Python", ["cryptography", "security", "cybersecurity", "encryption", "c"], "Cryptographic recipes and primitives for Python with C bindings."),
-  repo("facebook/zstd", "C", ["compression", "algorithm", "c", "systems"], "Fast lossless compression algorithm by Meta."),
-  repo("lz4/lz4", "C", ["compression", "algorithm", "c", "fast"], "Extremely fast compression algorithm."),
-  repo("openssl/openssl", "C", ["cryptography", "security", "cybersecurity", "tls", "c", "ssl"], "TLS/SSL and crypto library."),
+  repo("pyca/cryptography", "Python", ["cryptography", "security", "cybersecurity", "encryption"], "Cryptographic recipes and primitives for Python with C bindings."),
+  repo("facebook/zstd", "C", ["compression", "algorithm", "systems"], "Fast lossless compression algorithm by Meta."),
+  repo("lz4/lz4", "C", ["compression", "algorithm", "fast"], "Extremely fast compression algorithm."),
+  repo("openssl/openssl", "C", ["cryptography", "security", "cybersecurity", "tls", "ssl"], "TLS/SSL and crypto library."),
   repo("certbot/certbot", "Python", ["security", "cybersecurity", "cryptography", "tls", "cli"], "EFF's automated TLS certificate tool."),
   repo("paramiko/paramiko", "Python", ["security", "cybersecurity", "ssh", "cryptography", "networking"], "Python SSHv2 protocol library."),
   repo("google/brotli", "C", ["compression", "web", "algorithm"], "Generic-purpose lossless compression algorithm."),
@@ -142,6 +142,9 @@ export const REGISTRY: RegistryRepo[] = [
   // Games & Graphics
   repo("godotengine/godot", "C++", ["games", "graphics", "engine", "ui"], "Free and open source 2D and 3D game engine."),
   repo("bevyengine/bevy", "Rust", ["games", "graphics", "engine", "rust"], "A refreshingly simple data-driven game engine built in Rust."),
+  repo("pygame-community/pygame-ce", "Python", ["games", "graphics", "gamedev", "python"], "Community edition of Pygame for 2D game development."),
+  repo("raysan5/raylib", "C", ["games", "graphics", "library", "gamedev"], "Simple and easy-to-use library to enjoy videogames programming in C."),
+  repo("panda3d/panda3d", "C++", ["games", "graphics", "engine", "3d"], "Game engine for 3D games and simulations in Python and C++."),
 ];
 
 export function findRepo(fullName: string): RegistryRepo | undefined {

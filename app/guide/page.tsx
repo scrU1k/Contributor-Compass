@@ -185,6 +185,9 @@ export default function GuidePage() {
     setAskError(null);
     setAnswer(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       const res = await fetch("/api/guide/ask", {
         method: "POST",
@@ -195,14 +198,20 @@ export default function GuidePage() {
           candidate: payload.candidate,
           question: q,
         }),
+        signal: controller.signal,
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not get an answer");
       setAnswer(data.answer);
     } catch (err) {
-      setAskError(err instanceof Error ? err.message : "Failed to ask question");
+      if (err instanceof Error && err.name === "AbortError") {
+        setAskError("Request timed out. Please try again.");
+      } else {
+        setAskError(err instanceof Error ? err.message : "Failed to ask question");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setAsking(false);
     }
   }
