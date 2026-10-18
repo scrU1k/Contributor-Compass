@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   return withRequestConfig(configFromRequest(request), async () => {
-    let body: { repo?: unknown; number?: unknown; profile?: unknown };
+    let body: { repo?: unknown; number?: unknown; profile?: unknown; candidate?: unknown };
     try {
       body = await request.json();
     } catch {
@@ -38,22 +38,35 @@ export async function POST(request: Request) {
     const profile = parsedProfile.data;
 
     try {
-      const [issue, signals, pullsResult] = await Promise.all([
-        getIssue(repo, number),
-        getRepoSignals(repo),
-        getRepoOpenPRs(repo).catch(() => null),
-      ]);
-      if (issue.state !== "open") {
-        return NextResponse.json({ error: "That issue is closed, so a new contribution cannot start there." }, { status: 409 });
+      let ranked: RankedCandidate;
+
+      // If client provided the pre-evaluated candidate from the initial search, reuse it immediately
+      const cand = body.candidate as RankedCandidate | undefined;
+      if (
+        cand &&
+        typeof cand === "object" &&
+        cand.repo?.toLowerCase() === repo.toLowerCase() &&
+        cand.number === number &&
+        cand.signals
+      ) {
+        ranked = cand;
+      } else {
+        const [issue, signals, pullsResult] = await Promise.all([
+          getIssue(repo, number),
+          getRepoSignals(repo),
+          getRepoOpenPRs(repo).catch(() => null),
+        ]);
+        if (issue.state !== "open") {
+          return NextResponse.json({ error: "That issue is closed, so a new contribution cannot start there." }, { status: 409 });
+        }
+
+        const candidate = toCandidate(issue, repo, signals, pullsResult ? linkedPRCount(pullsResult, number) : null);
+        ranked = {
+          ...candidate,
+          score: scoreCandidate(candidate, profile),
+          why: "",
+        };
       }
-
-      const candidate = toCandidate(issue, repo, signals, pullsResult ? linkedPRCount(pullsResult, number) : null);
-
-      const ranked: RankedCandidate = {
-        ...candidate,
-        score: scoreCandidate(candidate, profile),
-        why: "",
-      };
 
       const guidance = await buildGuidance(ranked, profile);
       return NextResponse.json({ candidate: ranked, guidance });

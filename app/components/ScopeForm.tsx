@@ -14,7 +14,7 @@ import type {
 import { ChipGroup, type ChipOption } from "./ChipGroup";
 import { TierToggle } from "./TierToggle";
 
-const INTERESTS: ChipOption<string>[] = [
+const BASE_INTERESTS: ChipOption<string>[] = [
   "Web",
   "CLI tooling",
   "Data / ML",
@@ -28,7 +28,7 @@ const INTERESTS: ChipOption<string>[] = [
   "Not sure — open to anything",
 ].map((value) => ({ value, label: value }));
 
-const STACK: ChipOption<string>[] = [
+const BASE_STACK: ChipOption<string>[] = [
   "Python",
   "JavaScript",
   "TypeScript",
@@ -96,6 +96,28 @@ export function ScopeForm() {
   const [size, setSize] = useState<IssueSize>("small");
   const [error, setError] = useState<string | null>(null);
 
+  // Custom "Other" inputs
+  const [showOtherInterest, setShowOtherInterest] = useState(false);
+  const [customInterestInput, setCustomInterestInput] = useState("");
+  const [showOtherStack, setShowOtherStack] = useState(false);
+  const [customStackInput, setCustomStackInput] = useState("");
+
+  function addCustomInterest() {
+    const val = customInterestInput.trim();
+    if (val && !interests.includes(val)) {
+      setInterests((prev) => [...prev, val]);
+      setCustomInterestInput("");
+    }
+  }
+
+  function addCustomStack() {
+    const val = customStackInput.trim();
+    if (val && !stack.includes(val)) {
+      setStack((prev) => [...prev, val]);
+      setCustomStackInput("");
+    }
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
 
@@ -119,9 +141,27 @@ export function ScopeForm() {
       issueSize: tier === "newcomer" ? "any" : size,
     };
 
+    // Clear stale cached results on fresh submission
+    sessionStorage.removeItem("compass.results");
+    sessionStorage.removeItem("compass.scout");
     sessionStorage.setItem("compass.profile", JSON.stringify(profile));
     router.push("/results");
   }
+
+  // Combine base options with custom ones
+  const allInterestOptions: ChipOption<string>[] = [
+    ...BASE_INTERESTS,
+    ...interests
+      .filter((i) => !BASE_INTERESTS.some((b) => b.value.toLowerCase() === i.toLowerCase()))
+      .map((val) => ({ value: val, label: `✦ ${val}` })),
+  ];
+
+  const allStackOptions: ChipOption<string>[] = [
+    ...BASE_STACK,
+    ...stack
+      .filter((s) => !BASE_STACK.some((b) => b.value.toLowerCase() === s.toLowerCase()))
+      .map((val) => ({ value: val, label: `✦ ${val}` })),
+  ];
 
   return (
     <form className="panel" onSubmit={submit}>
@@ -143,12 +183,56 @@ export function ScopeForm() {
       <div className="field">
         <span className="field-label">What do you find interesting?</span>
         <p className="field-hint">Interest is the best predictor of whether you finish.</p>
-        <ChipGroup
-          ariaLabel="Interests"
-          options={INTERESTS}
-          selected={interests}
-          onToggle={(value) => setInterests((list) => toggle(list, value))}
-        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+          <ChipGroup
+            ariaLabel="Interests"
+            options={allInterestOptions}
+            selected={interests}
+            onToggle={(value) => setInterests((list) => toggle(list, value))}
+          />
+          <button
+            type="button"
+            className={`chip${showOtherInterest ? " active" : ""}`}
+            style={{ borderStyle: "dashed" }}
+            onClick={() => setShowOtherInterest((prev) => !prev)}
+          >
+            {showOtherInterest ? "− Close Other" : "+ Other..."}
+          </button>
+        </div>
+
+        {showOtherInterest && (
+          <div style={{ marginTop: "10px", display: "flex", gap: "8px", maxWidth: "420px" }}>
+            <input
+              type="text"
+              placeholder="e.g. astronomy, robotics, bioinformatics..."
+              value={customInterestInput}
+              onChange={(e) => setCustomInterestInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomInterest();
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: "6px 12px",
+                borderRadius: "6px",
+                border: "1px solid var(--line)",
+                background: "var(--bg-input, #0d111a)",
+                color: "var(--fg)",
+                fontSize: "0.85rem",
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ padding: "4px 12px", fontSize: "0.82rem" }}
+              onClick={addCustomInterest}
+            >
+              Add
+            </button>
+          </div>
+        )}
       </div>
 
       {tier === "newcomer" && (
@@ -172,12 +256,56 @@ export function ScopeForm() {
       <div className="field">
         <span className="field-label">What can you work in today?</span>
         <p className="field-hint">Be honest — this filters the search.</p>
-        <ChipGroup
-          ariaLabel="Technology stack"
-          options={STACK}
-          selected={stack}
-          onToggle={(value) => setStack((list) => toggle(list, value))}
-        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+          <ChipGroup
+            ariaLabel="Technology stack"
+            options={allStackOptions}
+            selected={stack}
+            onToggle={(value) => setStack((list) => toggle(list, value))}
+          />
+          <button
+            type="button"
+            className={`chip${showOtherStack ? " active" : ""}`}
+            style={{ borderStyle: "dashed" }}
+            onClick={() => setShowOtherStack((prev) => !prev)}
+          >
+            {showOtherStack ? "− Close Other" : "+ Other..."}
+          </button>
+        </div>
+
+        {showOtherStack && (
+          <div style={{ marginTop: "10px", display: "flex", gap: "8px", maxWidth: "420px" }}>
+            <input
+              type="text"
+              placeholder="e.g. Elixir, Dart, Haskell, Lua, Solidity..."
+              value={customStackInput}
+              onChange={(e) => setCustomStackInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomStack();
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: "6px 12px",
+                borderRadius: "6px",
+                border: "1px solid var(--line)",
+                background: "var(--bg-input, #0d111a)",
+                color: "var(--fg)",
+                fontSize: "0.85rem",
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ padding: "4px 12px", fontSize: "0.82rem" }}
+              onClick={addCustomStack}
+            >
+              Add
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="field">

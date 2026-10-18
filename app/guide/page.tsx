@@ -44,7 +44,7 @@ export default function GuidePage() {
         const response = await fetch("/api/guide", {
           method: "POST",
           headers: { "content-type": "application/json", ...settingsHeaders() },
-          body: JSON.stringify({ repo: selected.repo, number: selected.number, profile }),
+          body: JSON.stringify({ repo: selected.repo, number: selected.number, profile, candidate: selected }),
         });
         const data = (await response.json()) as GuidePayload & { error?: string };
         if (!response.ok) throw new Error(data.error ?? "Could not build the guide");

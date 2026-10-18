@@ -28,8 +28,8 @@ export interface MatchResult {
 }
 
 const REPOS_TO_SCOUT = 3;
-const ISSUES_PER_REPO = 5;
-const LIVE_SEARCH_REPOS = 2;
+const ISSUES_PER_REPO = 6;
+const LIVE_SEARCH_REPOS = 3;
 
 function liveDiscoveryQueries(profile: Profile): string[] {
   const language = profile.stack[0]?.tech.replace(/[^a-zA-Z0-9+#.-]/g, "");
@@ -72,7 +72,7 @@ async function discoverOutsideRegistry(profile: Profile, knownRepos: Set<string>
     if (seenIssues.has(issueKey)) continue;
     seenIssues.add(issueKey);
     const list = byRepo.get(repo) ?? [];
-    if (list.length < 2) list.push(issue);
+    if (list.length < 4) list.push(issue);
     byRepo.set(repo, list);
   }
 

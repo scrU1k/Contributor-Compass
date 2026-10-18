@@ -114,15 +114,28 @@ export function scoreCandidate(
   });
 
   // ── accessibility ──────────────────────────────────────────────────────────
-  const accessItems: [boolean, number, string][] = [
-    [s.hasReadmeSetup, 0.25, "README with setup"],
-    [s.hasContributing, 0.2, "CONTRIBUTING guide"],
-    [s.hasCI, 0.15, "CI pipeline"],
-    [s.hasTests, 0.15, "Test suite"],
-    [s.hasDevcontainer, 0.1, "Devcontainer"],
-    [Boolean(s.license), 0.1, "License"],
-    [s.hasCodeOfConduct, 0.05, "Code of conduct"],
-  ];
+  // CONTRIBUTING guide is preferred for first-timers (0.20), but not mandatory.
+  // For experienced devs, technical readiness (CI, test suite) carries the weight, while CONTRIBUTING is low preference (0.05).
+  const isNewcomer = profile.tier === "newcomer";
+  const accessItems: [boolean, number, string][] = isNewcomer
+    ? [
+        [s.hasReadmeSetup, 0.25, "README with setup"],
+        [s.hasContributing, 0.20, "CONTRIBUTING guide (preferred for newcomers)"],
+        [s.hasCI, 0.15, "CI pipeline"],
+        [s.hasTests, 0.15, "Test suite"],
+        [s.hasDevcontainer, 0.10, "Devcontainer"],
+        [Boolean(s.license), 0.10, "License"],
+        [s.hasCodeOfConduct, 0.05, "Code of conduct"],
+      ]
+    : [
+        [s.hasCI, 0.25, "CI pipeline"],
+        [s.hasTests, 0.25, "Test suite"],
+        [s.hasReadmeSetup, 0.20, "README with setup"],
+        [Boolean(s.license), 0.10, "License"],
+        [s.hasDevcontainer, 0.10, "Devcontainer"],
+        [s.hasContributing, 0.05, "CONTRIBUTING guide"],
+        [s.hasCodeOfConduct, 0.05, "Code of conduct"],
+      ];
   let accessibility = clamp01(
     accessItems.reduce((acc, [present, w]) => acc + (present ? w : 0), 0),
   );

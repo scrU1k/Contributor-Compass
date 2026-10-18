@@ -168,7 +168,8 @@ export class GemmaJevHarness {
         throw new Error("Gemma LLM credentials not configured");
       }
 
-      let res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+      // Single-pass high-speed structured completion with 8s timeout to ensure sub-second to low-second responses
+      const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -182,38 +183,9 @@ export class GemmaJevHarness {
           ],
           temperature: 0.0,
           max_tokens: 320,
-          // Request token logprobs where supported
-          logprobs: true,
-          top_logprobs: 20,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(8_000),
       });
-
-      if (!res.ok && res.status === 400) {
-        // Graceful fallback if endpoint rejects logprobs: retry without logprobs
-        const errText = await res.text().catch(() => "");
-        if (/logprob/i.test(errText)) {
-          res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: `Bearer ${key}`,
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: systemInstruction },
-                { role: "user", content: userPrompt },
-              ],
-              temperature: 0.0,
-              max_tokens: 320,
-            }),
-            signal: AbortSignal.timeout(30_000),
-          });
-        } else {
-          throw new Error(`Gemma-Jev API ${res.status}: ${errText.slice(0, 200)}`);
-        }
-      }
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");

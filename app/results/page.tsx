@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { Profile, RankedCandidate } from "@/core/types";
 import { CandidateCard } from "../components/CandidateCard";
 import { ResultsNodeGraph } from "../components/ResultsNodeGraph";
@@ -27,6 +27,42 @@ export default function ResultsPage() {
   const [results, setResults] = useState<RankedCandidate[] | null>(null);
   const [scout, setScout] = useState<ScoutInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAllIssues, setShowAllIssues] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchIssues = useCallback(async (parsedProfile: Profile) => {
+    try {
+      setIsRefreshing(true);
+      setError(null);
+      const response = await fetch("/api/match", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...settingsHeaders() },
+        body: JSON.stringify(parsedProfile),
+      });
+      const data = (await response.json()) as {
+        results?: RankedCandidate[];
+        scout?: ScoutInfo;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error ?? "Could not fetch issues");
+
+      const fetchedResults = data.results ?? [];
+      const fetchedScout = data.scout ?? null;
+
+      setResults(fetchedResults);
+      setScout(fetchedScout);
+
+      // Cache results in sessionStorage so navigating to guide and back is instantaneous
+      sessionStorage.setItem("compass.results", JSON.stringify(fetchedResults));
+      if (fetchedScout) {
+        sessionStorage.setItem("compass.scout", JSON.stringify(fetchedScout));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("compass.profile");
@@ -44,34 +80,33 @@ export default function ResultsPage() {
     }
     setProfile(parsed);
 
-    let cancelled = false;
+    // Check if we already have cached search results in sessionStorage
+    const cachedResultsRaw = sessionStorage.getItem("compass.results");
+    const cachedScoutRaw = sessionStorage.getItem("compass.scout");
 
-    (async () => {
+    if (cachedResultsRaw) {
       try {
-        const response = await fetch("/api/match", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...settingsHeaders() },
-          body: JSON.stringify(parsed),
-        });
-        const data = (await response.json()) as {
-          results?: RankedCandidate[];
-          scout?: ScoutInfo;
-          error?: string;
-        };
-        if (!response.ok) throw new Error(data.error ?? "Could not fetch issues");
-        if (!cancelled) {
-          setResults(data.results ?? []);
-          setScout(data.scout ?? null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Something went wrong");
+        const cachedResults = JSON.parse(cachedResultsRaw) as RankedCandidate[];
+        const cachedScout = cachedScoutRaw ? (JSON.parse(cachedScoutRaw) as ScoutInfo) : null;
+        setResults(cachedResults);
+        setScout(cachedScout);
+        return;
+      } catch {
+        // Corrupt cache: fall through to network fetch
       }
-    })();
+    }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+    // No cache: perform initial search
+    void fetchIssues(parsed);
+  }, [router, fetchIssues]);
+
+  function handleRefresh() {
+    if (!profile) return;
+    sessionStorage.removeItem("compass.results");
+    sessionStorage.removeItem("compass.scout");
+    setResults(null);
+    void fetchIssues(profile);
+  }
 
   function open(candidate: RankedCandidate) {
     sessionStorage.setItem("compass.selected", JSON.stringify(candidate));
@@ -84,20 +119,35 @@ export default function ResultsPage() {
     <>
       <SiteHeader />
       <main className="container">
-        <div className="page-head">
+        <div className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
           <div>
             <h1>{newcomer ? "Your first PR plan" : "Issues worth your time"}</h1>
             {profile && <p className="subtle">{summary(profile)}</p>}
           </div>
-          <Link href="/" className="back">
-            ← Change preferences
-          </Link>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ padding: "6px 12px", fontSize: "0.82rem" }}
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? "Scanning..." : "↻ Refresh search"}
+            </button>
+            <Link href="/" className="back">
+              ← Change preferences
+            </Link>
+          </div>
         </div>
 
         {scout && scout.repos.length > 0 && (
           <p className="subtle" style={{ marginBottom: 16 }}>
-            {scout.source === "gemma" ? "Gemma selected from registry" : scout.source === "hybrid" ? "Curated registry + live GitHub discovery" : "Registry fallback + live GitHub discovery"}:{" "}
-            {scout.repos.map((repo) => repo.fullName).join(" · ")}
+            {scout.source === "gemma"
+              ? "Gemma selected from registry"
+              : scout.source === "hybrid"
+                ? "Curated registry + live GitHub discovery"
+                : "Registry fallback + live GitHub discovery"}
+            : {scout.repos.map((repo) => repo.fullName).join(" · ")}
           </p>
         )}
 
@@ -110,7 +160,7 @@ export default function ResultsPage() {
               <Link href="/settings">Settings</Link>.
             </p>
             <div className="card-actions" style={{ justifyContent: "center", marginTop: 16 }}>
-              <button type="button" className="btn btn-primary" onClick={() => location.reload()}>
+              <button type="button" className="btn btn-primary" onClick={handleRefresh}>
                 Try again
               </button>
               <Link href="/verify" className="btn btn-ghost">
@@ -149,27 +199,33 @@ export default function ResultsPage() {
 
         {!error && results !== null && results.length > 0 && (
           <>
+            {/* Interactive Topological Knowledge Graph */}
             <ResultsNodeGraph
               profile={profile}
               candidates={results}
               onSelectCandidate={open}
             />
 
+            {/* Candidate Cards Section */}
             {newcomer ? (
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1rem" }}>
                   <h3 style={{ fontSize: "1.15rem", margin: 0, fontWeight: 650 }}>
-                    Recommended Starting Issue
+                    Top Recommended Starter Issues (1–3)
                   </h3>
                   <span className="subtle" style={{ fontSize: "0.85rem" }}>
                     Verified doable & unassigned
                   </span>
                 </div>
+
+                {/* Top 1 Featured Card */}
                 <CandidateCard candidate={results[0]} tier="newcomer" featured rank={1} onSelect={open} />
+
+                {/* Top 2 and 3 Cards */}
                 {results.length > 1 && (
                   <>
                     <p className="subtle" style={{ margin: "1.75rem 0 0.85rem" }}>
-                      If that one doesn&apos;t fit, these are also verified:
+                      Alternative top verified issues:
                     </p>
                     <div className="cards">
                       {results.slice(1, 3).map((candidate, idx) => (
@@ -184,22 +240,81 @@ export default function ResultsPage() {
                     </div>
                   </>
                 )}
+
+                {/* Remaining issues (4 to 10) */}
+                {results.length > 3 && (
+                  <div style={{ marginTop: "2rem" }}>
+                    <div style={{ textAlign: "center", margin: "1.5rem 0" }}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ padding: "8px 20px", fontSize: "0.88rem", border: "1px dashed var(--line)" }}
+                        onClick={() => setShowAllIssues((prev) => !prev)}
+                      >
+                        {showAllIssues
+                          ? "▲ Collapse additional issues"
+                          : `▼ Show ${results.length - 3} more verified issues (${results.length} total)`}
+                      </button>
+                    </div>
+
+                    {showAllIssues && (
+                      <div className="cards">
+                        {results.slice(3).map((candidate, idx) => (
+                          <CandidateCard
+                            key={`${candidate.repo}#${candidate.number}`}
+                            candidate={candidate}
+                            tier="newcomer"
+                            rank={idx + 4}
+                            onSelect={open}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <>
-                <p className="subtle" style={{ marginBottom: 16 }}>
-                  {results.length} verified issue{results.length === 1 ? "" : "s"}, ranked by readiness.
-                </p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1rem" }}>
+                  <p className="subtle" style={{ margin: 0 }}>
+                    {results.length} verified issue{results.length === 1 ? "" : "s"} across repositories, ranked by readiness.
+                  </p>
+                  {results.length > 3 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: "0.8rem", padding: "4px 10px" }}
+                      onClick={() => setShowAllIssues((prev) => !prev)}
+                    >
+                      {showAllIssues ? "Show Top 3 Only" : `View All ${results.length}`}
+                    </button>
+                  )}
+                </div>
+
                 <div className="cards">
-                  {results.map((candidate) => (
+                  {(showAllIssues ? results : results.slice(0, 3)).map((candidate, idx) => (
                     <CandidateCard
                       key={`${candidate.repo}#${candidate.number}`}
                       candidate={candidate}
                       tier="experienced"
+                      rank={idx + 1}
                       onSelect={open}
                     />
                   ))}
                 </div>
+
+                {!showAllIssues && results.length > 3 && (
+                  <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ padding: "8px 20px", fontSize: "0.88rem", border: "1px dashed var(--line)" }}
+                      onClick={() => setShowAllIssues(true)}
+                    >
+                      ▼ View {results.length - 3} more verified issues ({results.length} total)
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </>
