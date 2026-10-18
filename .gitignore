@@ -1,11 +1,58 @@
-node_modules
-.next
-out
-dist
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Environment and secrets
 .env
 .env.local
 .env.*.local
-.cache
-*.log
+*.pem
+*.key
+
+# Local cache & temporary files
+.cache/
+*.tmp
+*.tmp.*
+*.temp
+tmp/
+temp/
+
+# Testing artifacts and test coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# TypeScript & tooling
 *.tsbuildinfo
+.eslintcache
 next-env.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE & Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.user
+*.sublime-*
+*.swp
+*.swo
+
+# Operating System files
+.DS_Store
+Thumbs.db

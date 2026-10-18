@@ -153,9 +153,18 @@ export function CandidateCard({
               Structural Check
             </span>
           )}
-          {!newcomer && !isTopThree && (
-            <span className="badge neutral">{candidate.score.total.toFixed(0)}/100</span>
-          )}
+          <span
+            className="badge neutral"
+            style={{
+              fontSize: "0.72rem",
+              fontWeight: 600,
+              padding: "0.15rem 0.5rem",
+              fontVariantNumeric: "tabular-nums",
+            }}
+            title={`Contribution Readiness Score: ${candidate.score.total.toFixed(0)}/100`}
+          >
+            {candidate.score.total.toFixed(0)}/100
+          </span>
         </div>
       </div>
 

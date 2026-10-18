@@ -4,10 +4,10 @@ import crypto from "node:crypto";
 import { env, isOffline } from "@/core/config/env";
 
 /**
- * Deliberately boring: one JSON file per key, with a TTL, on disk.
- *
- * No infrastructure, no migration story to explain on stage, and it makes
- * `COMPASS_OFFLINE=1` a real guarantee rather than a best effort.
+ * Multi-Tier Cache:
+ * - L1: In-memory LRU cache (< 0.1ms read time, eliminates process-level re-reads)
+ * - L2: Atomic disk cache (local dev / serverless ephemeral disk) OR Upstash Redis REST
+ * - In-flight deduplication: Prevents cache stampedes under concurrent loads
  */
 
 interface Entry<T> {
@@ -22,6 +22,52 @@ export class CacheMissError extends Error {
   }
 }
 
+/** In-memory LRU cache (L1) */
+class LruMemoryCache<T = unknown> {
+  private map = new Map<string, Entry<T>>();
+  constructor(private readonly maxCapacity: number = 500) {}
+
+  get(key: string, allowExpired = false): Entry<T> | undefined {
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (!allowExpired && entry.expiresAt < Date.now()) {
+      this.map.delete(key);
+      return undefined;
+    }
+    // Refresh LRU order (delete & re-insert)
+    this.map.delete(key);
+    this.map.set(key, entry);
+    return entry;
+  }
+
+  set(key: string, value: T, expiresAt: number): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.maxCapacity) {
+      const oldestKey = this.map.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.map.delete(oldestKey);
+      }
+    }
+    this.map.set(key, { expiresAt, value });
+  }
+
+  clear(): void {
+    this.map.clear();
+  }
+
+  size(): number {
+    return this.map.size;
+  }
+}
+
+const l1 = new LruMemoryCache(500);
+
+/** Exported for testing and cache reset */
+export function clearL1Cache(): void {
+  l1.clear();
+}
+
 function cacheDir(): string {
   const dir = env.cacheDir();
   return path.isAbsolute(dir) ? dir : path.join(/*turbopackIgnore: true*/ process.cwd(), dir);
@@ -33,22 +79,61 @@ function keyToFile(key: string): string {
   return path.join(cacheDir(), `${safe}--${hash}.json`);
 }
 
-export async function readCache<T>(
-  key: string,
-  opts: { allowExpired?: boolean } = {},
-): Promise<T | undefined> {
+// Optional Upstash Redis REST L2 check
+function getRedisConfig(): { url: string; token: string } | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) return { url, token };
+  return null;
+}
+
+async function readL2<T>(key: string): Promise<Entry<T> | undefined> {
+  const redis = getRedisConfig();
+  if (redis) {
+    try {
+      const safeKey = `cc:${encodeURIComponent(key)}`;
+      const res = await fetch(`${redis.url}/get/${safeKey}`, {
+        headers: { Authorization: `Bearer ${redis.token}` },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { result: string | null };
+        if (data?.result) {
+          return JSON.parse(data.result) as Entry<T>;
+        }
+      }
+    } catch {
+      // Fall through to disk if Redis fails
+    }
+  }
+
+  // Disk fallback
   try {
     const raw = await fs.readFile(keyToFile(key), "utf8");
-    const entry = JSON.parse(raw) as Entry<T>;
-    if (!opts.allowExpired && entry.expiresAt < Date.now()) return undefined;
-    return entry.value;
+    return JSON.parse(raw) as Entry<T>;
   } catch {
     return undefined;
   }
 }
 
-export async function writeCache<T>(key: string, value: T, ttlMs: number): Promise<void> {
-  const entry: Entry<T> = { expiresAt: Date.now() + ttlMs, value };
+async function writeL2<T>(key: string, entry: Entry<T>, ttlMs: number): Promise<void> {
+  const redis = getRedisConfig();
+  if (redis) {
+    try {
+      const safeKey = `cc:${encodeURIComponent(key)}`;
+      const ttlSec = Math.max(1, Math.floor(ttlMs / 1000));
+      await fetch(`${redis.url}/set/${safeKey}/${encodeURIComponent(JSON.stringify(entry))}?ex=${ttlSec}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${redis.token}` },
+        signal: AbortSignal.timeout(3000),
+      });
+      return;
+    } catch {
+      // Fall through to disk write
+    }
+  }
+
+  // Atomic disk write
   const file = keyToFile(key);
   const dir = path.dirname(file);
   await fs.mkdir(dir, { recursive: true });
@@ -60,14 +145,37 @@ export async function writeCache<T>(key: string, value: T, ttlMs: number): Promi
   await fs.rename(tmpFile, file);
 }
 
+export async function readCache<T>(
+  key: string,
+  opts: { allowExpired?: boolean } = {},
+): Promise<T | undefined> {
+  // L1 Check
+  const l1Hit = l1.get(key, opts.allowExpired) as Entry<T> | undefined;
+  if (l1Hit) return l1Hit.value;
+
+  // L2 Check
+  const entry = await readL2<T>(key);
+  if (!entry) return undefined;
+  if (!opts.allowExpired && entry.expiresAt < Date.now()) return undefined;
+
+  // Backfill L1
+  l1.set(key, entry.value, entry.expiresAt);
+  return entry.value;
+}
+
+export async function writeCache<T>(key: string, value: T, ttlMs: number): Promise<void> {
+  const entry: Entry<T> = { expiresAt: Date.now() + ttlMs, value };
+  l1.set(key, value, entry.expiresAt);
+  await writeL2(key, entry, ttlMs);
+}
+
 const inFlight = new Map<string, Promise<unknown>>();
 
 /**
- * Read-through cache with in-flight deduplication.
+ * Read-through cache with multi-tier storage and in-flight deduplication.
  *
- * - Online:  return a fresh hit, otherwise deduplicate and call `fn` and persist.
- * - Offline: return a hit regardless of expiry (a stale demo beats a blank
- *            screen), otherwise throw CacheMissError so the caller can degrade.
+ * - Online:  Check L1 (memory) -> Check L2 (Redis/Disk) -> Run deduplicated fn() -> Save L1 + L2.
+ * - Offline: return a hit regardless of expiry, otherwise throw CacheMissError.
  */
 export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   if (isOffline()) {
@@ -100,7 +208,7 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
   return promise;
 }
 
-export async function cacheStats(): Promise<{ dir: string; files: number; bytes: number }> {
+export async function cacheStats(): Promise<{ dir: string; files: number; bytes: number; l1Size: number }> {
   const dir = cacheDir();
   try {
     const names = await fs.readdir(dir);
@@ -109,8 +217,8 @@ export async function cacheStats(): Promise<{ dir: string; files: number; bytes:
       const st = await fs.stat(path.join(dir, n));
       bytes += st.size;
     }
-    return { dir, files: names.length, bytes };
+    return { dir, files: names.length, bytes, l1Size: l1.size() };
   } catch {
-    return { dir, files: 0, bytes: 0 };
+    return { dir, files: 0, bytes: 0, l1Size: l1.size() };
   }
 }

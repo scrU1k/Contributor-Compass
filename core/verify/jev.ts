@@ -183,6 +183,7 @@ export class GemmaJevHarness {
           ],
           temperature: 0.0,
           max_tokens: 320,
+          logprobs: true,
         }),
         signal: AbortSignal.timeout(8_000),
       });

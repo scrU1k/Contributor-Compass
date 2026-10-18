@@ -28,9 +28,11 @@ export class LlmError extends Error {
 }
 
 import { cachedLlmCall } from "@/core/llm/cache";
+import { llmCircuitBreaker } from "@/core/resilience/circuitBreaker";
 
 export function llmConfigured(): boolean {
   if (isOffline()) return true;
+  if (llmCircuitBreaker.isOpen()) return false;
   const model = env.llmModel();
   return Boolean(
     env.llmBaseUrl() && env.llmApiKey() && model && /^gemma-4(?:-|$)/i.test(model),
@@ -59,27 +61,29 @@ export async function chatText(messages: ChatMessage[], opts: ChatOptions = {}):
     const key = env.llmApiKey();
     if (!base || !key) throw new LlmError("LLM is not configured");
 
-    const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify(cacheKey),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
+    return llmCircuitBreaker.execute(async () => {
+      const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(cacheKey),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new LlmError(`LLM ${res.status}: ${detail.slice(0, 300)}`);
+      }
+
+      const json = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const content = json.choices?.[0]?.message?.content;
+      if (!content) throw new LlmError("LLM returned no content");
+      return content;
     });
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new LlmError(`LLM ${res.status}: ${detail.slice(0, 300)}`);
-    }
-
-    const json = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const content = json.choices?.[0]?.message?.content;
-    if (!content) throw new LlmError("LLM returned no content");
-    return content;
   });
 }
 
