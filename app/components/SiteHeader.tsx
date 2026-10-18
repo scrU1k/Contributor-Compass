@@ -128,9 +128,9 @@ export function SiteHeader() {
             )}
           </button>
 
-          {/* Saved Option placed between theme toggle and Find issues */}
+          {/* History link placed between theme toggle and Find issues */}
           <Link
-            href="/results?tab=saved"
+            href="/history"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -138,28 +138,11 @@ export function SiteHeader() {
               textDecoration: "none",
               fontSize: "0.85rem",
               fontWeight: 550,
-              color: savedCount > 0 ? "var(--accent)" : "var(--muted)",
             }}
-            title="View saved issues"
+            title="View search history"
           >
-            <span style={{ fontSize: "0.95rem" }}>★</span>
-            <span>Saved</span>
-            {savedCount > 0 && (
-              <span
-                style={{
-                  background: "var(--accent)",
-                  color: "#fff",
-                  fontSize: "0.68rem",
-                  fontWeight: 700,
-                  borderRadius: "999px",
-                  padding: "1px 6px",
-                  marginLeft: "2px",
-                  lineHeight: 1.2,
-                }}
-              >
-                {savedCount}
-              </span>
-            )}
+            <span style={{ fontSize: "0.85rem" }}>🕒</span>
+            <span>History</span>
           </Link>
 
           <Link href="/">Find issues</Link>

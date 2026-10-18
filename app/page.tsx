@@ -1,3 +1,4 @@
+import { HeroSavedButton } from "./components/HeroSavedButton";
 import { KeyBanner } from "./components/KeyBanner";
 import { ScopeForm } from "./components/ScopeForm";
 import { SiteHeader } from "./components/SiteHeader";
@@ -15,6 +16,7 @@ export default function HomePage() {
             is still open, unassigned, and in a project that actually merges work from outsiders —
             then we write you a way in.
           </p>
+          <HeroSavedButton />
         </section>
 
         <KeyBanner />

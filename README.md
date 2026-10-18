@@ -101,6 +101,45 @@ Contributors stuck on an issue can ask targeted questions ("How do I reproduce t
 
 ---
 
+## 🌐 Web Application & Interactive Experience
+
+Contributor Compass provides a clean, responsive, and developer-first web interface designed for rapid exploration and distraction-free onboarding:
+
+```
+[ Hero Landing Page (/) ] ──► [ Interactive Questionnaire ] ──► [ Verified Results & Graph (/results) ]
+         │                                                                   │
+         ├─► [ ★ Saved Issues Modal / Hover Tooltip ]                         ├─► [ Interactive Static Node Graph ]
+         │                                                                   ├─► [ Attuned Issue Guide (/guide) ]
+         └─► [ 🕒 History Page (/history) ]                                         └─► [ 💬 Ask Gemma Assistant ]
+             (Snapshots & Stale Notices)
+```
+
+1. **Dedicated Search History (`/history`):**
+   - Accessible via the **"🕒 History"** button in the top navigation bar (between the theme toggle and "Find issues").
+   - Records past discovery runs into structured snapshots with query profiles, timestamps, and candidate counts.
+   - **Click-to-Expand Cards:** Inspect all verified issues captured during past runs without re-executing GitHub queries.
+   - **Restore Search:** One click restores any prior search directly back into the live `/results` view.
+   - **Stale State Notice:** Prominently alerts contributors that GitHub issue states evolve continuously (PR merges, maintainer assignments, closures), ensuring developers understand historical snapshot context.
+
+2. **Hero Saved Issues Engine:**
+   - Located directly on the home page hero section (`/`).
+   - **Smart Tooltip:** When no issues are saved, hovering or clicking displays an informative tooltip guiding newcomers on how to bookmark issues.
+   - **Instant Backdrop Modal:** When issues are saved, a badge counter lights up. Clicking opens a modal listing all bookmarked issues with direct actions to **"Get the guide ➔"**, inspect on **GitHub**, or remove bookmarks.
+
+3. **Interactive Static Node Graph (`/results`):**
+   - Visualizes the topology of verified issues, parent repositories, and technology tags.
+   - Designed with static equilibrium to prevent distracting layout shifts, featuring click-to-pin inspection popovers with issue health indicators, readiness scores, and maintainer activity.
+
+4. **Attuned Issue Guides & "Ask Gemma" Inline Copilot (`/guide`):**
+   - Each guide provides bespoke setup instructions, verified file citations, and contribution approaches.
+   - stuck on setup? Click **"💬 Ask Gemma"** directly beside the issue title to open an interactive Q&A assistant grounded in the issue's real repository context.
+
+5. **Pure SVG Dark / Light Mode Toggle:**
+   - Seamless instantaneous theme switching with pure inline SVG icons, persisting across sessions.
+
+6. **Personal Contribution Tracker:**
+   - Mark issues as "Done / Fixed", "PR Opened", or "Merged", tracking your open-source journey in real time with an automated header badge counter.
+
 ## 🔬 How Real Signals Are Verified (No Hallucinations)
 
 Contributor Compass doesn't guess; it extracts live data using GitHub's Core REST API:
@@ -265,6 +304,13 @@ core/                 # Framework-agnostic core library
 ├── score/            # Contribution Readiness Score calculation engine
 ├── verify/           # Evidence verifier, Jev harness, and single-issue verifier
 app/                  # Next.js App Router (UI & Route Handlers)
+├── components/       # UI Components (SiteHeader, ScopeForm, HeroSavedButton, NodeGraph, etc.)
+├── history/          # Dedicated Search History page with stale-state warnings
+├── results/          # Verified issue rankings & interactive topology graph
+├── guide/            # Step-by-step issue guide & inline Ask Gemma Q&A
+├── settings/         # BYOK credentials configuration
+├── verify/           # Live direct issue/repo URL verifier
+├── api/              # Route handlers (find, scout, verify, guide, ask)
 cli.ts                # Contributor Compass Terminal Edition
 scripts/              # Prefetch cache warmer & Jev evaluation benchmarks
 ```
