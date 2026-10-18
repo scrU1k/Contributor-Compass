@@ -59,67 +59,95 @@ Whether via the Web Application or the Terminal CLI, Contributor Compass guides 
 
 Contributor Compass runs **completely out-of-the-box**. No database to install, no Docker containers to spin up, and no mandatory API keys required to test the core pipeline, automated unit tests, or CLI.
 
+### 📋 Prerequisites
+
+Before installing, ensure you have the following installed on your system:
+- **Git**: [git-scm.com](https://git-scm.com/) (`git --version`)
+- **Node.js**: v18.18.0 or v20+ recommended (`node --version`)
+- **npm**: v9.0.0 or v10+ (`npm --version`)
+
+---
+
+### 🚀 Complete Step-by-Step Installation
+
+#### 1. Clone the Repository
 ```bash
-# 1. Install dependencies
-npm install
-
-# 2. Run the automated test suite (25 tests, pure deterministic assertions)
-npm test
-
-# 3. Launch the Web Application (GUI on localhost)
-npm run dev
-# -> Open your browser at http://localhost:3000
-
-# 4. (Optional) Run the production build locally
-npm run build
-npm start
-
-# 5. Launch the Terminal Edition (CLI)
-npm run cli
-
-# View CLI options or pass a natural-language query directly:
-npm run cli -- --help
-npm run cli -- "I know Python and docs, looking for starter issues in openstreetmap"
+git clone https://github.com/scrU1k/Contributor-Compass.git
+cd Contributor-Compass
 ```
 
-### 🌐 Running the Web Application (Localhost GUI)
+#### 2. Install Dependencies
+```bash
+npm install
+```
+*(Zero native compilation issues. No Python / C++ build tools, PostgreSQL, Redis, or external database required).*
 
-To run Contributor Compass locally in your browser:
+#### 3. (Optional) Configure Environment Variables
+Contributor Compass works immediately with zero configuration. Public read-only GitHub access and offline structural triage run without any keys.
 
-1. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
-2. **Open the application:** Navigate to [**`http://localhost:3000`**](http://localhost:3000).
-3. **Core Interface Features:**
-   - **Interactive PR Scope Form (`/`):** Multi-factor questionnaire attuned to experience tier, stack fluency, and domain interests.
-   - **Find by Link (`/verify`):** Paste single or multiple GitHub links (issues, repos, or orgs) with inline `+` rows, a silent 50-character limit, and Gemma-powered semantic focus tags.
-   - **Interactive Static Node Graph (`/results`):** Inspect relationships between repos, issues, and tech stacks with minimal readiness score badges (`84/100`) on every card.
-   - **Grounded Contribution Guides (`/guide`):** Step-by-step setup and implementation paths with real Git tree citations.
-   - **Ask Gemma Assistant (`/guide`):** Ask targeted questions about any issue ("How do I set up tests?", "Where is this defined?") answered by Gemma using grounded repository signals.
-   - **Search History & Saved Bookmarks (`/history`):** Review prior searches, inspect snapshots with stale-state warnings, and bookmark issues across sessions.
-   - **Dark / Light Mode Toggle:** Instantaneous pure SVG theme switcher.
-   - **Bring Your Own Key (`/settings`):** Enter a Google AI Studio Gemma API Key and GitHub Token stored solely in browser `localStorage`.
+If you want to configure server-wide defaults instead of entering keys in the web UI settings or CLI:
+```bash
+# On Linux / macOS:
+cp .env.example .env
 
-### 💻 Terminal Edition (CLI)
+# On Windows (PowerShell or CMD):
+copy .env.example .env
+```
+Key variables in `.env` (all 100% optional):
+- `GITHUB_TOKEN`: Raises GitHub REST API rate limits from 60 to 5,000 req/hr.
+- `LLM_API_KEY`: Google AI Studio key for Gemma 4 (get a free key at [Google AI Studio](https://aistudio.google.com/apikey)).
+- `LLM_MODEL`: Defaults to `gemma-4-31b-it`.
 
+#### 4. Run the Deterministic Test Battery
+Verify your setup by running the automated test suite:
+```bash
+npm test
+```
+**25 tests, 0 failures, ~400ms execution**. Asserts Jev-style single-letter decision logic, multi-tier cache expiration, rate-limit circuit breakers, score algorithms, and real Git-tree file path verification without making external network calls.
+
+#### 5. Launch the Web Application (Localhost GUI)
+Start the Next.js local development server with hot module reloading:
+```bash
+npm run dev
+```
+Open your browser and navigate to:
+👉 [**`http://localhost:3000`**](http://localhost:3000)
+
+*(To test the production build locally instead: `npm run build && npm start`)*
+
+#### 6. Launch the Terminal Edition (CLI)
+You can also run Contributor Compass directly in your terminal:
 ```bash
 # Interactive questionnaire (typing "I am a beginner" / "I am experienced" launches the wizard)
 npm run cli
 
-# View CLI reference and options
+# View CLI reference and command manual
 npm run cli -- --help
 
 # Interactively configure Bring-Your-Own-Key credentials
 npm run cli -- --keys
 
 # One-shot natural language search
-npm run cli -- "I know TypeScript and React, looking for quick bug fixes"
+npm run cli -- "I know Python and docs, looking for starter issues in openstreetmap"
 
 # Budgeted discovery across an organization or single issue
 npm run cli -- --org openstreetmap
 npm run cli -- --issue pallets/flask#5555
 ```
+
+---
+
+### 🌐 Web Application Feature Tour
+
+Once running at `http://localhost:3000`, explore the primary workflow:
+- **Interactive PR Scope Form (`/`):** Multi-factor questionnaire attuned to experience tier, stack fluency, and domain interests.
+- **Find by Link (`/verify`):** Paste single or multiple GitHub links (issues, repos, or orgs) with inline `+` rows, a silent 50-character limit, and Gemma-powered semantic focus tags.
+- **Interactive Static Node Graph (`/results`):** Inspect relationships between repos, issues, and tech stacks with minimal readiness score badges (`84/100`) on every card.
+- **Grounded Contribution Guides (`/guide`):** Step-by-step setup and implementation paths with real Git tree citations.
+- **Ask Gemma Assistant (`/guide`):** Ask targeted questions about any issue ("How do I set up tests?", "Where is this defined?") answered by Gemma using grounded repository signals.
+- **Search History & Saved Bookmarks (`/history`):** Review prior searches, inspect snapshots with stale-state warnings, and bookmark issues across sessions.
+- **Dark / Light Mode Toggle:** Instantaneous pure SVG theme switcher.
+- **Bring Your Own Key (`/settings`):** Enter a Google AI Studio Gemma API Key and GitHub Token stored solely in browser `localStorage`.
 
 > **Bring-Your-Own-Key (BYOK) Privacy:**  
 > Keys are **100% optional**. Deterministic structural triage runs with zero keys. Adding a Google AI Studio key enables Gemma 4 Jev-style checks and onboarding guides; adding a GitHub token increases rate limits from 60 to 5,000 req/hr. In the Web UI, keys are stored in the browser's `localStorage` and transmitted per-request via headers; the Node.js server scopes them strictly to that request via `AsyncLocalStorage` and never persists them to server disks, databases, or logs.
