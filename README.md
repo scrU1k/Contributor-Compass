@@ -11,6 +11,15 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![BYOK Privacy](https://img.shields.io/badge/BYOK%20Privacy-Zero%20Required%20Keys-00C853?style=flat-square)](.env.example)
 
+<p align="center">
+  <img src="docs/images/landing-hero.png" width="32%" alt="Interactive Scope Form & BYOK" />
+  <img src="docs/images/topology-graph.png" width="32%" alt="Discovery & Readiness Topology Graph" />
+  <img src="docs/images/step-by-step-guide.png" width="32%" alt="Grounded Guide & Ask Gemma Copilot" />
+</p>
+<p align="center">
+  <em>1. Interactive Scope Form (<code>/</code>) &nbsp;·&nbsp; 2. Topology & Readiness Graph (<code>/results</code>) &nbsp;·&nbsp; 3. Grounded Guide & Ask Gemma (<code>/guide</code>)</em>
+</p>
+
 ---
 
 ## 💡 The Motivation: Solving the Open Source Newcomer Wall
