@@ -1,4 +1,5 @@
 # 🧭 Contributor Compass
+*Open Source For All*
 
 > **"Verified, not listed."**  
 > Existing discovery tools hand developers a static list of `good first issue` tags. **Contributor Compass** transforms a developer's skills and goals into a **live-verified, ready-to-work path into open source** — with checkable evidence for every claim.
